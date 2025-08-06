@@ -1,0 +1,36 @@
+# Cursor Rules for defiactions-scaffold
+
+This file provides context and guidelines for working with the `defiactions-scaffold` repository.
+
+## Project Overview
+
+This repository is a starter scaffold for building DeFi actions on the Flow blockchain. It includes a basic Cadence contract (`cadence/contracts/Counter.cdc`), transactions, scripts, and tests, along with extensive documentation on best practices.
+
+## Key Documentation
+
+The `/docs` directory is the primary source of truth for architecture, patterns, and conventions. When working on this repository, please reference these documents.
+
+- **Index**: [`docs/index.md`](./docs/index.md)
+- **Core Framework**: [`docs/core-framework.md`](./docs/core-framework.md)
+- **Composition**: [`docs/composition.md`](./docs/composition.md)
+- **Connectors**: [`docs/connectors.md`](./docs/connectors.md)
+- **Patterns**: [`docs/patterns.md`](./docs/patterns.md)
+- **Type System**: [`docs/type-system.md`](./docs/type-system.md)
+- **Transaction Templates**: [`docs/transaction-templates.md`](./docs/transaction-templates.md)
+- **Safety Rules**: [`docs/safety-rules.md`](./docs/safety-rules.md)
+- **Testing**: [`docs/testing.md`](./docs/testing.md)
+- **Workflows**:
+    - [`docs/workflows/autobalancer-workflow.md`](./docs/workflows/autobalancer-workflow.md)
+    - [`docs/workflows/restaking-workflow.md`](./docs/workflows/restaking-workflow.md)
+
+## Development Guidelines
+
+These are guidelines and preferences for development in this repository.
+
+- **No FCL**: Do not use the Flow Client Library (FCL).
+- **React SDK Setup**: When using the Flow React SDK, the following setup is preferred:
+    1.  Configure `FlowProvider` by passing the `flow.json` file to it.
+    2.  Import the `flow.json` file directly into React components.
+    3.  Set up a `*.cdc` loader for Next.js to allow direct import of Cadence scripts and transactions.
+- **Flow Project Initialization**: The project assumes `flow init` has been run, and `flow.json` is present in the root directory.
+- **Network Configuration**: For the Flow React SDK, ensure each network configuration in `flow.json` includes `discovery.wallet`, `accessNode.api`, and `discovery.authn.endpoint`. 
