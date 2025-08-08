@@ -23,6 +23,40 @@ import DeFiActions from 0x123456789abcdef0      // COMPILE ERROR
 
 ## Critical Pre/Post-Condition Rules
 
+### Post-conditions should use user-provided minimum expected change (HIGH)
+**Enforcement**: Runtime Safety  
+**Criticality**: HIGH
+
+- Prefer absolute, user-supplied expectations for post-conditions (e.g., `minimumRestakedAmount`, `minimumReceivedAmount`).
+- Do NOT compute expectations from in-transaction quotes or pricing; these should be independently derived by the caller.
+- Pattern: record baseline in `prepare`, then assert the delta in `post` using user-provided minimums.
+
+```cadence
+// Example: restaking workflow
+transaction(pid: UInt64, minimumRestakedAmount: UFix64) {
+    let userCertificateCap: Capability<&Staking.UserCertificate>
+    let pool: &{Staking.PoolPublic}
+    let startingStake: UFix64
+
+    prepare(acct: auth(BorrowValue) &Account) {
+        self.pool = IncrementFiStakingConnectors.borrowPool(poolID: pid)
+            ?? panic("Pool not accessible")
+        self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
+            ?? panic("No user info")
+        self.userCertificateCap = acct.capabilities.storage
+            .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
+    }
+
+    execute { /* claim → zap → deposit ... */ }
+
+    post {
+        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount 
+            >= self.startingStake + minimumRestakedAmount:
+            "Restaked amount below minimum expectation"
+    }
+}
+```
+
 ### Single Expression Rule (BLOCKING)
 **Enforcement**: Compile-time  
 **Criticality**: BLOCKING

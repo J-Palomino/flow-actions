@@ -4,104 +4,90 @@
 **Components**: PoolRewardsSource → SwapSource(Zapper) → PoolSink  
 **Related**: [Pattern 1](../patterns.md#pattern-1-restaking-workflow)
 
+> Note: Post-conditions should assert a user-provided minimum restake delta (e.g., `minimumRestakedAmount`), not values computed in the transaction (quotes/prices). This decouples validation from execution.
+
 ## Required Imports
 ```cadence
 import "FungibleToken"
-import "DeFiActions"
-import "SwapStack"
+import "Staking"
 import "IncrementFiStakingConnectors"
 import "IncrementFiPoolLiquidityConnectors"
-import "Staking"
+import "SwapStack"
+import "DeFiActions"
+import "SwapConfig"
 ```
 
 ## Component Flow
 ```
 1. PoolRewardsSource    → Claims staking rewards
-2. Zapper               → Converts single token to LP tokens
-3. SwapSource           → Combines PoolRewardsSource + Zapper
+2. Zapper               → Converts reward token + pair token to LP tokens
+3. SwapSource           → Composes RewardsSource + Zapper
 4. PoolSink             → Stakes LP tokens back into pool
 ```
 
-## Transaction Implementation
+## Transaction Implementation (Minimal Parameters)
 ```cadence
+/// Restakes earned staking rewards by converting them to LP tokens and staking them back into the same pool.
+/// 1. Harvest reward tokens from the pool
+/// 2. Convert rewards to LP tokens via a zapper (reward + pair token)
+/// 3. Restake LP tokens into the original pool
 transaction(
-    pid: UInt64,                    // Pool identifier
-    poolCollectionAddress: Address, // Pool collection address parameter
-    rewardTokenType: Type,         // Reward token type (e.g., Type<@FlowToken.Vault>())
-    token0Type: Type,              // LP token 0 type
-    token1Type: Type,              // LP token 1 type
-    slippageTolerance: UFix64      // Acceptable slippage (e.g., 0.01 = 1%)
+    pid: UInt64,
+    rewardTokenType: Type,     // Reward token type
+    pairTokenType: Type,       // Other token in the LP pair
+    minimumRestakedAmount: UFix64  // Absolute minimum stake delta required
 ) {
     let userCertificateCap: Capability<&Staking.UserCertificate>
+    let pool: &{Staking.PoolPublic}
     let startingStake: UFix64
-    
+
     prepare(acct: auth(BorrowValue, SaveValue) &Account) {
-        // Get user certificate capability
-        self.userCertificateCap = acct.capabilities.storage
-            .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
-        
-        // Save starting stake for post-condition validation
-        let pool = getAccount(poolCollectionAddress).capabilities
-            .borrow<&Staking.StakingPoolCollection>(Staking.CollectionPublicPath)!
-            .getPool(pid: pid)
-        
-        self.startingStake = pool.getUserInfo(address: acct.address)!.stakingAmount
+        self.pool = IncrementFiStakingConnectors.borrowPool(poolID: pid)
+            ?? panic("Pool with ID \(pid) not found or not accessible")
+
+        self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
+            ?? panic("No user info found for address \(acct.address)")
+
+        self.userCertificateCap = acct.capabilities.storage.issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
     }
-    
+
     execute {
-        // Step 1: Create reward source
-        let rewardSource = IncrementFiStakingConnectors.PoolRewardsSource(
+        let poolRewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
             userCertificate: self.userCertificateCap,
             poolID: pid,
             vaultType: rewardTokenType,
             overflowSinks: {},
             uniqueID: nil
         )
-        
-        // Step 2: Create LP zapper
+
         let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
-            token0Type: token0Type,
-            token1Type: token1Type,
+            token0Type: rewardTokenType,
+            token1Type: pairTokenType,
             stableMode: false,
             uniqueID: nil
         )
-        
-        // Step 3: Combine reward source + zapper
-        let lpSource = SwapStack.SwapSource(
+
+        let lpTokenPoolRewardsSource = SwapStack.SwapSource(
             swapper: zapper,
-            source: rewardSource,
+            source: poolRewardsSource,
             uniqueID: nil
         )
-        
-        // Step 4: Create staking sink
-        let stakingSink = IncrementFiStakingConnectors.PoolSink(
-            staker: self.userCertificateCap.address,
+
+        let poolSink = IncrementFiStakingConnectors.PoolSink(
             poolID: pid,
+            staker: self.userCertificateCap.address,
             uniqueID: nil
         )
-        
-        // Step 5: Execute transfer
-        let vault <- lpSource.withdrawAvailable(maxAmount: UFix64.max)
-        stakingSink.depositCapacity(
-            from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
-        )
-        
-        // Step 6: Validate complete transfer
-        assert(vault.balance == 0.0, message: "Transfer incomplete")
+
+        let vault <- lpTokenPoolRewardsSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
+        poolSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
+        assert(vault.balance == 0.0, message: "Vault should be empty after withdrawal - restaking may have failed")
         destroy vault
     }
-    
-    pre {
-        pid > 0: "Pool ID must be positive"
-    }
-    
+
     post {
-        getAccount(poolCollectionAddress).capabilities
-            .borrow<&Staking.StakingPoolCollection>(Staking.CollectionPublicPath)!
-            .getPool(pid: pid)
-            .getUserInfo(address: self.userCertificateCap.address)!
-            .stakingAmount >= self.startingStake * (1.0 - slippageTolerance):
-            "Restake amount below expected"
+        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount >= self.startingStake + minimumRestakedAmount:
+            "Restaking failed: restaked amount below the minimum required"
     }
 }
 ```
@@ -109,59 +95,24 @@ transaction(
 ## Component Details
 
 ### PoolRewardsSource
-- **Purpose**: Claims pending staking rewards from specified pool
-- **Input**: User certificate, pool ID, reward token type
-- **Output**: Vault containing claimed rewards
-- **Side Effects**: Updates user's reward balance in pool
+- Claims pending staking rewards from the specified pool using the user's certificate
+- Returns a source that yields reward tokens for further composition
 
 ### Zapper
-- **Purpose**: Converts single reward token into LP token pair
-- **Input**: Single token vault (from rewards)
-- **Output**: LP token vault
-- **Side Effects**: Executes optimal swap + liquidity provision
+- Converts reward tokens plus a pair token into LP tokens
+- Used via `SwapSource` to compose with the rewards source
 
 ### PoolSink
-- **Purpose**: Stakes LP tokens back into the same or different pool
-- **Input**: LP token vault
-- **Output**: Updated staking position
-- **Side Effects**: Increases user's staking balance
+- Stakes LP tokens back into the same pool for the user
 
-## Usage Examples
-
-### Basic Restaking
+## Usage Example
 ```cadence
-// Restake FLOW rewards as FLOW/USDC LP tokens
-// Pool 42, 1% slippage tolerance
+// Restake stFLOW rewards as FLOW-stFLOW LP with a 10.0 minimum restake amount
+// (No pool address param; uses IncrementFiStakingConnectors.borrowPool internally)
 restakeRewards(
     pid: 42,
-    poolCollectionAddress: 0x1234567890abcdef,
-    rewardTokenType: Type<@FlowToken.Vault>(),
-    token0Type: Type<@FlowToken.Vault>(),
-    token1Type: Type<@USDC.Vault>(),
-    slippageTolerance: 0.01
+    rewardTokenType: Type<@StFlowToken.Vault>(),
+    pairTokenType: Type<@FlowToken.Vault>(),
+    minimumRestakedAmount: 10.0
 )
-```
-
-### Cross-Pool Restaking
-```cadence
-// Claim rewards from pool 42, stake LP tokens in pool 24
-// (Modify PoolSink poolID parameter)
-```
-
-## Error Handling
-
-### Common Failures
-- **No rewards available**: PoolRewardsSource.minimumAvailable() returns 0
-- **Insufficient liquidity**: Zapper cannot create LP tokens due to pool constraints
-- **Pool inactive**: Target staking pool is not accepting new stakes
-- **Slippage exceeded**: Final stake amount below tolerance threshold
-
-### Validation Checks
-```cadence
-// Pre-flight validation
-let availableRewards = rewardSource.minimumAvailable()
-assert(availableRewards > 0.0, message: "No rewards available to claim")
-
-let stakingCapacity = stakingSink.minimumCapacity()
-assert(stakingCapacity > 0.0, message: "Pool not accepting new stakes")
 ```

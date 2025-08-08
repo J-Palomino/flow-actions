@@ -20,7 +20,7 @@ let swapper = ComponentSwapper(...)
 let sink = ComponentSink(...)
 
 let inputVault <- source.withdrawAvailable(maxAmount: amount)
-let outputVault <- swapper.swap(from: <-inputVault)
+let outputVault <- swapper.swap(quote: nil, inVault: <-inputVault)
 sink.depositCapacity(from: &outputVault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 assert(outputVault.balance == 0.0, message: "Transfer incomplete")
 destroy outputVault
@@ -92,8 +92,8 @@ let lpSwapSource = SwapStack.SwapSource(
 
 // Step 4: Staking sink
 let stakingSink = IncrementFiStakingConnectors.PoolSink(
-    staker: userAddress,
     poolID: poolId,
+    staker: userAddress,
     uniqueID: operationID
 )
 
@@ -161,8 +161,8 @@ let sink = ComponentSink(..., uniqueID: operationID)
 ### Validate Component Compatibility
 ```cadence
 // Ensure type compatibility
-assert(source.getSourceType() == swapper.getFromType(), message: "Source/Swapper type mismatch")
-assert(swapper.getToType() == sink.getSinkType(), message: "Swapper/Sink type mismatch")
+assert(source.getSourceType() == swapper.inType(), message: "Source/Swapper type mismatch")
+assert(swapper.outType() == sink.getSinkType(), message: "Swapper/Sink type mismatch")
 ```
 
 ### Check Capacity Before Execution
