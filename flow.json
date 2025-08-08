@@ -21,5 +21,12 @@
 				"location": "emulator-account.pkey"
 			}
 		}
+	},
+	"deployments": {
+		"emulator": {
+			"emulator-account": [
+				"Counter"
+			]
+		}
 	}
 }
