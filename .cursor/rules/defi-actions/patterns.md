@@ -6,10 +6,7 @@
 **File**: [`restaking-workflow.md`](./workflows/restaking-workflow.md)
 
 ### Expected Inputs
-- `pid: UInt64` – Pool identifier
-- `rewardTokenType: Type` – Type of reward tokens to claim
-- `pairTokenType: Type` – Second token in the LP pair
-- `minimumRestakedAmount: UFix64` – Absolute minimum expected restaked amount
+- `pid: UInt64` – Pool identifier (token types and mode are derived from the pool pair)
 
 ---
 

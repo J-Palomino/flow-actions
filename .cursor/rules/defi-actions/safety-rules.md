@@ -42,20 +42,21 @@ transaction(...) {
 
 ## Critical Pre/Post-Condition Rules
 
-### Post-conditions should use user-provided minimum expected change (HIGH)
+### Post-conditions should guard the intended outcome (HIGH)
 **Enforcement**: Runtime Safety  
 **Criticality**: HIGH
 
-- Prefer absolute, user-supplied expectations for post-conditions (e.g., `minimumRestakedAmount`, `minimumReceivedAmount`).
-- Do NOT compute expectations from in-transaction quotes or pricing; these should be independently derived by the caller.
-- Pattern: record baseline in `prepare`, then assert the delta in `post` using user-provided minimums.
+- For generic swap/transfer templates, prefer absolute, user-supplied minimums (e.g., `minimumReceivedAmount`).
+- For the canonical restake workflow, derive `expectedStakeIncrease` from connector quotes and assert `newStake >= startingStake + expectedStakeIncrease` (no extra parameter).
+- Pattern: record baseline in `prepare`, then assert the delta in `post` using either a user minimum (generic) or a computed quote (canonical restake).
 
 ```cadence
-// Example: restaking workflow
-transaction(pid: UInt64, minimumRestakedAmount: UFix64) {
+// Example: canonical restaking workflow (computed expectation)
+transaction(pid: UInt64) {
     let userCertificateCap: Capability<&Staking.UserCertificate>
     let pool: &{Staking.PoolPublic}
     let startingStake: UFix64
+    let expectedStakeIncrease: UFix64
 
     prepare(acct: auth(BorrowValue) &Account) {
         self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
@@ -64,14 +65,15 @@ transaction(pid: UInt64, minimumRestakedAmount: UFix64) {
             ?? panic("No user info")
         self.userCertificateCap = acct.capabilities.storage
             .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
+        // ... derive pair, build zapper & rewards, compute expectedStakeIncrease ...
     }
 
     execute { /* claim → zap → deposit ... */ }
 
     post {
         self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount 
-            >= self.startingStake + minimumRestakedAmount:
-            "Restaked amount below minimum expectation"
+            >= self.startingStake + self.expectedStakeIncrease:
+            "Restaked amount below expected"
     }
 }
 ```

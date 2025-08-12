@@ -1,235 +1,135 @@
-## 👋 Welcome Flow Developer!
+## 👋 Welcome to the DeFiActions Scaffold
 
-This project is a starting point for you to develop smart contracts on the Flow Blockchain. It comes with example contracts, scripts, transactions, and tests to help you get started.
+This repository is a scaffold for building with Flow Actions (DeFiActions) and includes AI-friendly guidance for composing safe Cadence transactions from standardized connectors.
 
-## 🔨 Getting Started
+- **What’s included**:
+  - Minimal Flow project with dependencies for DeFiActions and IncrementFi connectors
+  - Example transaction: Claim → Zap → Restake for IncrementFi LP rewards
+  - Opinionated safety/style rules for agent-assisted transaction composition
 
-Here are some essential resources to help you hit the ground running:
+References:
+- FLIP-338: Flow Actions – composable standards for protocols ([onflow/FLIPs](https://github.com/onflow/FLIPs))
+- DeFiActions repo: [onflow/DeFiActions](https://github.com/onflow/DeFiActions)
 
-- **[Flow Documentation](https://developers.flow.com/)** - The official Flow Documentation is a great starting point to start learning about about [building](https://developers.flow.com/build/flow) on Flow.
-- **[Cadence Documentation](https://cadence-lang.org/docs/language)** - Cadence is the native language for the Flow Blockchain. It is a resource-oriented programming language that is designed for developing smart contracts.  The documentation is a great place to start learning about the language.
-- **[Visual Studio Code](https://code.visualstudio.com/)** and the **[Cadence Extension](https://marketplace.visualstudio.com/items?itemName=onflow.cadence)** - It is recommended to use the Visual Studio Code IDE with the Cadence extension installed.  This will provide syntax highlighting, code completion, and other features to support Cadence development.
-- **[Flow Clients](https://developers.flow.com/tools/clients)** - There are clients available in multiple languages to interact with the Flow Blockchain.  You can use these clients to interact with your smart contracts, run transactions, and query data from the network.
-- **[Block Explorers](https://developers.flow.com/ecosystem/block-explorers)** - Block explorers are tools that allow you to explore on-chain data.  You can use them to view transactions, accounts, events, and other information.  [Flowser](https://flowser.dev/) is a powerful block explorer for local development on the Flow Emulator.
+## 🔨 Prerequisites
+
+- Flow CLI: install from the [Flow CLI docs](https://developers.flow.com/tools/flow-cli/install)
+- VS Code + Cadence extension (recommended): [Cadence Extension](https://marketplace.visualstudio.com/items?itemName=onflow.cadence)
 
 ## 📦 Project Structure
 
-Your project has been set up with the following structure:
+- `flow.json` – Project configuration with DeFiActions/IncrementFi dependencies
+- `cadence/contracts/` – Example contract (Counter)
+- `cadence/scripts/` – Example read-only script
+- `cadence/transactions/` – Transactions, including the IncrementFi restake example
+- `cadence/tests/` – Example tests
 
-- `flow.json` - This is the configuration file for your project (analogous to a `package.json` file for NPM).  It has been initialized with a basic configuration to get started.
-- `/cadence` - This is where your Cadence smart contracts code lives
+Key example:
+- `cadence/transactions/IncrementFi_Restake.cdc` – Claims IncrementFi farm rewards, zaps to LP, and restakes back into the same pool using DeFiActions connectors.
 
-Inside the `cadence` folder you will find:
-- `/contracts` - This folder contains your Cadence contracts (these are deployed to the network and contain the business logic for your application)
-  - `Counter.cdc`
-- `/scripts` - This folder contains your Cadence scripts (read-only operations)
-  - `GetCounter.cdc`
-- `/transactions` - This folder contains your Cadence transactions (state-changing operations)
-  - `IncrementCounter.cdc`
-- `/tests` - This folder contains your Cadence tests (integration tests for your contracts, scripts, and transactions to verify they behave as expected)
-  - `Counter_test.cdc`
+## ⚙️ Setup
 
-## Running the Existing Project
+You can run locally on the emulator or target testnet/mainnet. String-based imports resolve when the target network is running and dependencies are deployed or aliased in `flow.json`.
 
-### Executing the `GetCounter` Script
+### Option A: Emulator (local)
 
-To run the `GetCounter` script, use the following command:
-
-```shell
-flow scripts execute cadence/scripts/GetCounter.cdc
+1) Start the emulator (terminal A):
+```bash
+flow emulator start --init --simple
 ```
 
-### Sending the `IncrementCounter` Transaction
-
-To run the `IncrementCounter` transaction, use the following command:
-
-```shell
-flow transactions send cadence/transactions/IncrementCounter.cdc
+2) Deploy configured contracts (terminal B):
+```bash
+flow project deploy --network emulator
 ```
 
-To learn more about using the CLI, check out the [Flow CLI Documentation](https://developers.flow.com/tools/flow-cli).
+Notes:
+- This deploys the dependencies listed under `deployments.emulator` in `flow.json` to the local dev account.
+- Some protocol state (pairs/pools) may not exist on emulator by default; transactions that depend on live IncrementFi state may require custom local bootstrap.
 
-## 👨‍💻 Start Developing
+### Option B: Testnet (recommended for live protocol state)
 
-### Creating a New Contract
+1) Create or configure a testnet account in `flow.json` (or via `flow accounts create --network testnet`).
+2) Ensure dependencies in `flow.json` include `testnet` aliases (this scaffold includes many prefilled).
+3) No local deploy is required for contracts that already exist on testnet; imports use the configured addresses.
 
-To add a new contract to your project, run the following command:
+## ▶️ Run the IncrementFi Restake Transaction
 
-```shell
-flow generate contract
+Transaction: `cadence/transactions/IncrementFi_Restake.cdc`
+
+Purpose:
+- Claim pending farm rewards → Zap to LP → Stake LP back to the same pool
+
+Parameters:
+- `pid: UInt64` – IncrementFi pool ID
+
+Emulator example (after deploy):
+```bash
+flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
+  --network emulator \
+  --signer emulator-account \
+  --args-json '[{"type":"UInt64","value":"1"}]'
 ```
 
-This command will create a new contract file and add it to the `flow.json` configuration file.
-
-### Creating a New Script
-
-To add a new script to your project, run the following command:
-
-```shell
-flow generate script
+Testnet example (replace `testnet-account` with your signer alias):
+```bash
+flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
+  --network testnet \
+  --signer testnet-account \
+  --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
 ```
 
-This command will create a new script file.  Scripts are used to read data from the blockchain and do not modify state (i.e. get the current balance of an account, get a user's NFTs, etc).
+Requirements:
+- Signer must have `Staking.UserCertificate` at `Staking.UserCertificateStoragePath`.
+- `pid` must be a valid pool with rewards and a corresponding pair.
 
-You can import any of your own contracts or installed dependencies in your script file using the `import` keyword.  For example:
+## 🧭 Agent-Friendly Rules (for AI-assisted generation)
 
+Minimal restake flow uses string imports and standardized connectors:
 ```cadence
-import "Counter"
+import "FungibleToken"
+import "DeFiActions"
+import "SwapConnectors"
+import "IncrementFiStakingConnectors"
+import "IncrementFiPoolLiquidityConnectors"
+import "Staking"
 ```
 
-### Creating a New Transaction
+Core composition (Claim → Zap → Stake):
+- Source: `IncrementFiStakingConnectors.PoolRewardsSource`
+- Swapper: `IncrementFiPoolLiquidityConnectors.Zapper` (token types and `stableMode` from pair)
+- SwapSource: `SwapConnectors.SwapSource(swapper, source)`
+- Sink: `IncrementFiStakingConnectors.PoolSink`
 
-To add a new transaction to your project you can use the following command:
+Safety invariants to follow:
+- Size withdraws by sink capacity: `withdrawAvailable(maxAmount: sink.minimumCapacity())`
+- Assert residuals: `vault.balance == 0.0` before destroy
+- Single-expression `pre`/`post` checks
+- Use protocol helpers like `borrowPool(pid:)` and `borrowPairPublicByPid(pid:)`
 
-```shell
-flow generate transaction
-```
-
-This command will create a new transaction file.  Transactions are used to modify the state of the blockchain (i.e purchase an NFT, transfer tokens, etc).
-
-You can import any dependencies as you would in a script file.
-
-### Creating a New Test
-
-To add a new test to your project you can use the following command:
-
-```shell
-flow generate test
-```
-
-This command will create a new test file.  Tests are used to verify that your contracts, scripts, and transactions are working as expected.
-
-### Installing External Dependencies
-
-If you want to use external contract dependencies (such as NonFungibleToken, FlowToken, FungibleToken, etc.) you can install them using [Flow CLI Dependency Manager](https://developers.flow.com/tools/flow-cli/dependency-manager).
-
-For example, to install the NonFungibleToken contract you can use the following command:
-
-```shell
-flow deps add mainnet://1d7e57aa55817448.NonFungibleToken
-```
-
-Contracts can be found using [ContractBrowser](https://contractbrowser.com/), but be sure to verify the authenticity before using third-party contracts in your project.
+See `cadence/transactions/IncrementFi_Restake.cdc` for a complete example.
 
 ## 🧪 Testing
 
-To verify that your project is working as expected you can run the tests using the following command:
-
-```shell
+Run Cadence tests:
+```bash
 flow test
 ```
 
-This command will run all tests with the `_test.cdc` suffix (these can be found in the `cadence/tests` folder). You can add more tests here using the `flow generate test` command (or by creating them manually).
-
-To learn more about testing in Cadence, check out the [Cadence Test Framework Documentation](https://cadence-lang.org/docs/testing-framework).
-
-## 🚀 Deploying Your Project
-
-To deploy your project to the Flow network, you must first have a Flow account and have configured your deployment targets in the `flow.json` configuration file.
-
-You can create a new Flow account using the following command:
-
-```shell
-flow accounts create
+Lint a transaction:
+```bash
+flow cadence lint cadence/transactions/IncrementFi_Restake.cdc --network emulator
 ```
 
-Learn more about setting up deployment targets in the [Flow CLI documentation](https://developers.flow.com/tools/flow-cli/deployment/project-contracts).
+Note on checks: static checks that resolve imports require the target network to be up and/or contracts deployed. Prefer running against `--network testnet` for live protocol state.
 
-### Deploying to the Flow Emulator
+## 🔗 Helpful Links
 
-To deploy your project to the Flow Emulator, start the emulator using the following command:
-
-```shell
-flow emulator --start
-```
-
-To deploy your project, run the following command:
-
-```shell
-flow project deploy --network=emulator
-```
-
-This command will start the Flow Emulator and deploy your project to it. You can now interact with your project using the Flow CLI or alternate [client](https://developers.flow.com/tools/clients).
-
-### Deploying to Flow Testnet
-
-To deploy your project to Flow Testnet you can use the following command:
-
-```shell
-flow project deploy --network=testnet
-```
-
-This command will deploy your project to Flow Testnet. You can now interact with your project on this network using the Flow CLI or any other Flow client.
-
-### Deploying to Flow Mainnet
-
-To deploy your project to Flow Mainnet you can use the following command:
-
-```shell
-flow project deploy --network=mainnet
-```
-
-This command will deploy your project to Flow Mainnet. You can now interact with your project using the Flow CLI or alternate [client](https://developers.flow.com/tools/clients).
-
-## 📚 Other Resources
-
-- [Cadence Design Patterns](https://cadence-lang.org/docs/design-patterns)
-- [Cadence Anti-Patterns](https://cadence-lang.org/docs/anti-patterns)
-- [Flow Core Contracts](https://developers.flow.com/build/core-contracts)
+- Flow Docs: [developers.flow.com](https://developers.flow.com)
+- Cadence Language: [cadence-lang.org/docs/language](https://cadence-lang.org/docs/language)
+- Block Explorers: [Flowser](https://flowser.dev/)
 
 ## 🤝 Community
-- [Flow Community Forum](https://forum.flow.com/)
-- [Flow Discord](https://discord.gg/flow)
-- [Flow Twitter](https://x.com/flow_blockchain)
-
-## Claim → Zap → Restake (stFLOW → FLOW-stFLOW LP)
-
-A ready-to-use transaction is provided at `cadence/transactions/ClaimZapRestake_stFLOW.cdc`.
-It claims your Increment Fi farm rewards (e.g., stFLOW), zaps them into FLOW–stFLOW LP tokens, and restakes back into the same pool.
-
-Parameters:
-- `pid: UInt64` – Increment Fi pool ID (the farm you’re restaking into)
-- `rewardTokenType: Type` – Reward token Type (e.g., stFLOW Vault type)
-- `pairTokenType: Type` – Pair token Type (e.g., FLOW Vault type)
-- `minimumRestakedAmount: UFix64` – Required minimum increase in staked LP to accept the tx
-
-Important: you must map external contracts in `flow.json` so imports resolve:
-
-Example core aliases (fill in networks you use):
-```json
-{
-  "contracts": {
-    "FungibleToken": {
-      "aliases": {
-        "emulator": "0xee82856bf20e2aa6",
-        "testnet": "0x9a0766d93b6608b7",
-        "mainnet": "0xf233dcee88fe0abe"
-      }
-    },
-    "FlowToken": {
-      "aliases": {
-        "emulator": "0x0ae53cb6e3f42a79",
-        "testnet": "0x7e60df042a9c0868",
-        "mainnet": "0x1654653399040a61"
-      }
-    }
-  }
-}
-```
-
-You also need to add Increment Fi contracts (addresses differ by network; see Increment docs):
-- `Staking`
-- `IncrementFiStakingConnectors`
-- `IncrementFiPoolLiquidityConnectors`
-- `SwapStack`
-
-Usage notes:
-- For FLOW–stFLOW, pass `pairTokenType` as the FLOW Vault type, and `rewardTokenType` as stFLOW Vault type.
-- The transaction uses `stableMode: false` in the zapper. If your target LP is a stableswap pool, adjust the transaction to `stableMode: true`.
-- Ensure your account has a `Staking.UserCertificate` capability path set up (the transaction issues one from the standard storage path).
-
-Run (example outline):
-- Use your preferred SDK (FCL) to pass `Type` parameters for `rewardTokenType` and `pairTokenType`.
-- Or adapt the template from `docs/transaction-templates.md` to your tooling if your CLI doesn’t support `Type` args directly.
-
-Refer to `docs/transaction-templates.md` → "Claim → Zap → Restake (Minimal Params)" for the composition pattern used.
+- Forum: [forum.flow.com](https://forum.flow.com/)
+- Discord: [discord.gg/flow](https://discord.gg/flow)
+- X: [@flow_blockchain](https://x.com/flow_blockchain)

@@ -1,22 +1,23 @@
----
-description: Default guidance for composing RPC-style Cadence transactions to interact with Flow DeFi protocols (staking, rewards, swaps, LP). Suitable as a general default for protocol interactions.
-globs:
-  - cadence/**/*.cdc
-  - docs/**/*.md
-  - flow.json
-alwaysApply: false
----
 # Cursor Agent Rules
 
+> NOTE: Extended reference for agents and reviewers. The single canonical entry point is [`defiactions-agent-quick-rules.mdc`](./defiactions-agent-quick-rules.mdc). Start there for generation; use this page for deeper rationale and expanded guidance.
+
 These rules guide AI agents to generate correct, safe Cadence transactions using DeFiActions connectors.
+
+## Quick Entry
+- Pasteable rules for `.cursor/rules`: [defiactions-agent-quick-rules.mdc](./defiactions-agent-quick-rules.mdc)
+- Canonical restake workflow: [workflows/restaking-workflow.md](./workflows/restaking-workflow.md)
+- Connectors overview: [connectors.md](./connectors.md)
+- Composition patterns: [composition.md](./composition.md)
+- Transaction templates: [transaction-templates.md](./transaction-templates.md)
+- Checklist: [quick-checklist.md](./quick-checklist.md) • Safety: [safety-rules.md](./safety-rules.md)
 
 ## Goal Translation
 - Map prompts to a connector chain.
   - Restake rewards: `PoolRewardsSource -> SwapSource(Zapper) -> PoolSink`.
-- Identify token types from prompt and map to params:
-  - Reward token → `rewardTokenType`
-  - Pair token for LP → `pairTokenType`
-  - If user mentions “minimum restake increase” → `minimumRestakedAmount`.
+- Derive token types and mode from the staking pool pair; do not add parameters:
+  - Use `IncrementFiStakingConnectors.borrowPairPublicByPid(pid)` and `tokenTypeIdentifierToVaultType`.
+  - Use `pair.getPairInfoStruct().isStableswap` for `stableMode`.
 
 ## Imports
 Always use string imports:
@@ -35,24 +36,20 @@ import "Staking"
 
 ## Required Params (Restake)
 - `pid: UInt64`
-- `rewardTokenType: Type`
-- `pairTokenType: Type`
-- `minimumRestakedAmount: UFix64`
 
 ## Transaction Skeleton
 - Prepare:
   - Issue `Capability<&Staking.UserCertificate>`.
-  - Borrow pool via `IncrementFiStakingConnectors.borrowPool(pid:)`.
-  - Record `startingStake` from `pool.getUserInfo(address:)`.
+  - Borrow pool via `IncrementFiStakingConnectors.borrowPool(pid:)` and record `startingStake`.
+  - Borrow pair via `IncrementFiStakingConnectors.borrowPairPublicByPid(pid:)` and construct `Zapper` using derived token types and `stableMode`.
+  - Create `PoolRewardsSource` and wrap with `SwapConnectors.SwapSource`.
+  - Compute `expectedStakeIncrease` via `zapper.quoteOut(forProvided: rewards.minimumAvailable(), reverse: false)`.
 - Execute:
-  - `PoolRewardsSource(userCertificate, pid, uniqueID: nil)`.
-  - `Zapper(token0Type: rewardTokenType, token1Type: pairTokenType, stableMode: false)`.
-  - `SwapConnectors.SwapSource(swapper: zapper, source: rewards, uniqueID: nil)`.
-  - `PoolSink(pid: pid, staker: userCertificateCap.address, uniqueID: nil)`.
+  - `PoolSink(pid: pid, staker: userAddress, uniqueID: nil)`.
   - Size withdraws by the target sink’s capacity: `withdrawAvailable(maxAmount: poolSink.minimumCapacity())`.
   - Deposit, assert vault empty, destroy.
 - Post:
-  - Ensure `newStake >= startingStake + minimumRestakedAmount`.
+  - Ensure `newStake >= startingStake + expectedStakeIncrease`.
 
 ## Safety Invariants
 - Pre/post blocks contain single boolean expressions only.
@@ -67,26 +64,26 @@ import "Staking"
 - `SwapConnectors.SwapSource(swapper, source, uniqueID?)` exposes post-conversion as a `Source`.
 
 ## Common Variations
-- Multiple reward tokens: supply `overflowSinks` mapping to route non-primary slices.  // Note: when supported by specific pool connectors
-- Stable pool: set `stableMode: true` in `Zapper`.
+- Stable pool: set `stableMode` from pair info.
 - Quote-driven caps: prefer `sink.minimumCapacity()`/`source.minimumAvailable()`; avoid manual slippage math.
 
 ## Prompt-to-Params Examples
 - “Claim stFLOW rewards, swap to FLOW-stFLOW LP, and restake” →
-  - `rewardTokenType = Type<@StFlowToken.Vault>()`
-  - `pairTokenType = Type<@FlowToken.Vault>()`
-  - `minimumRestakedAmount` from user or default small value (e.g., `0.0` if not provided).
+  - `pid = 42`
+  - Tokens and `stableMode` are derived from the pool pair; no extra params.
 
 ## Code Style
 - Use named arguments.
 - Keep variable names descriptive: `poolRewardsSource`, `zapper`, `lpTokenPoolRewardsSource`, `poolSink`.
 - Prefer early returns and minimal nesting inside connector implementations (transactions use assertions instead).
+- Write for humans first: add brief comments at the start of each block (`prepare`, `pre`, `post`, `execute`) and before key steps (connector construction, withdraw/deposit, assertions) to explain intent and safety.
+- Keep comments focused on “why” and safety context (not restating code mechanics).
 
 ## Sanity Checklist
 - Imports present and string-based.
 - Capability issuance and borrows succeed or `panic` with context.
 - Connector inputs/outputs types align: `source.getSourceType()` == `swapper.inType()`, `swapper.outType()` == `sink.getSinkType()` (or rely on `SwapSource` construction preconditions).
-- Post-condition guards the intended outcome (`minimumRestakedAmount`).
+- Post-condition guards the intended outcome using computed `expectedStakeIncrease`.
 
 ---
 See also: [`connectors.md`](./connectors.md), [`composition.md`](./composition.md), [`quick-checklist.md`](./quick-checklist.md), [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md) 

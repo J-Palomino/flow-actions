@@ -23,20 +23,20 @@
 
 ## Build the Chain (Restake)
 - Source: `PoolRewardsSource(userCertificate, pid)`
-- Swapper: `Zapper(token0Type: rewardTokenType, token1Type: pairTokenType, stableMode: false)`
+- Swapper: `Zapper(token0Type: derived token0 from pair, token1Type: derived token1 from pair, stableMode: pair.isStableswap)`
 - Wrap: `SwapConnectors.SwapSource(swapper, source)`
 - Sink: `PoolSink(pid: pid, staker: userAddress)`
 
 ## Validate
 - `source.minimumAvailable() > 0.0`
 - `sink.minimumCapacity() > 0.0`
-- Post: `newStake >= startingStake + minimumRestakedAmount`
+- Post: `newStake >= startingStake + expectedStakeIncrease`
 
 ## Test
 - Zero amounts and `UFix64.max`
 - Invalid capabilities
 - Inactive pool
-- Threshold guard (`minimumRestakedAmount`)
+- Post-condition using computed `expectedStakeIncrease`
 
 ## Links
 - Restake Workflow: [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md)

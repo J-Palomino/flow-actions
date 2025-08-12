@@ -1,3 +1,3 @@
 {
-    "cadence.accessCheckMode": "none"
+    "cadence.customConfigPath": "./flow.json"
 }

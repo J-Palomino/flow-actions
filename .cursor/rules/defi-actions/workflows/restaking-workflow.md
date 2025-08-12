@@ -4,7 +4,7 @@
 **Components**: PoolRewardsSource → SwapSource(Zapper) → PoolSink  
 **Related**: [Pattern 1](../patterns.md#pattern-1-restaking-workflow)
 
-> Note: Post-conditions should assert a user-provided minimum restake delta (e.g., `minimumRestakedAmount`), not values computed in the transaction (quotes/prices). This decouples validation from execution.
+> Note: The canonical restake transaction derives the expected restake delta from connector quotes (no user-supplied minimum parameter). It asserts that the final stake is at least the starting stake plus the computed `expectedStakeIncrease`.
 
 ## Required Imports
 ```cadence
@@ -32,60 +32,71 @@ import "SwapConfig"
 /// 2. Convert rewards to LP tokens via a zapper (reward + pair token)
 /// 3. Restake LP tokens into the original pool
 transaction(
-    pid: UInt64,
-    rewardTokenType: Type,     // Reward token type
-    pairTokenType: Type,       // Other token in the LP pair
-    minimumRestakedAmount: UFix64  // Absolute minimum stake delta required
+    pid: UInt64
 ) {
-    let userCertificateCap: Capability<&Staking.UserCertificate>
+    let staker: Address
+    let uniqueID: DeFiActions.UniqueIdentifier
     let pool: &{Staking.PoolPublic}
     let startingStake: UFix64
+    let tokenSource: SwapConnectors.SwapSource
+    let expectedStakeIncrease: UFix64
 
-    prepare(acct: auth(BorrowValue, SaveValue) &Account) {
+    prepare(acct: auth(BorrowValue, SaveValue, IssueStorageCapabilityController) &Account) {
+        self.staker = acct.address
+        self.uniqueID = DeFiActions.createUniqueIdentifier()
+
         self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
             ?? panic("Pool with ID \(pid) not found or not accessible")
-
         self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
             ?? panic("No user info found for address \(acct.address)")
 
-        self.userCertificateCap = acct.capabilities.storage.issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
-    }
+        let userCertificateCap = acct.capabilities.storage
+            .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
 
-    execute {
-        let poolRewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
-            userCertificate: self.userCertificateCap,
-            pid: pid,
-            uniqueID: nil
-        )
+        let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
+            ?? panic("Pair with ID \(pid) not found or not accessible")
 
         let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
-            token0Type: rewardTokenType,
-            token1Type: pairTokenType,
-            stableMode: false,
-            uniqueID: nil
+            token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
+            token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
+            stableMode: pair.getPairInfoStruct().isStableswap,
+            uniqueID: self.uniqueID
         )
 
-        let lpTokenPoolRewardsSource = SwapConnectors.SwapSource(
-            swapper: zapper,
-            source: poolRewardsSource,
-            uniqueID: nil
-        )
-
-        let poolSink = IncrementFiStakingConnectors.PoolSink(
+        let rewards = IncrementFiStakingConnectors.PoolRewardsSource(
+            userCertificate: userCertificateCap,
             pid: pid,
-            staker: self.userCertificateCap.address,
-            uniqueID: nil
+            uniqueID: self.uniqueID
         )
 
-        let vault <- lpTokenPoolRewardsSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
-        poolSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
-        assert(vault.balance == 0.0, message: "Vault should be empty after withdrawal - restaking may have failed")
-        destroy vault
+        self.tokenSource = SwapConnectors.SwapSource(
+            swapper: zapper,
+            source: rewards,
+            uniqueID: self.uniqueID
+        )
+
+        self.expectedStakeIncrease = zapper.quoteOut(
+            forProvided: rewards.minimumAvailable(),
+            reverse: false
+        ).outAmount
     }
 
     post {
-        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount >= self.startingStake + minimumRestakedAmount:
-            "Restaking failed: restaked amount below the minimum required"
+        self.pool.getUserInfo(address: self.staker)!.stakingAmount >= self.startingStake + self.expectedStakeIncrease:
+            "Restaking failed: restaked amount below the expected amount"
+    }
+
+    execute {
+        let poolSink = IncrementFiStakingConnectors.PoolSink(
+            pid: pid,
+            staker: self.staker,
+            uniqueID: self.uniqueID
+        )
+
+        let vault <- self.tokenSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
+        poolSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
+        assert(vault.balance == 0.0, message: "Vault should be empty after withdrawal - restaking may have failed")
+        destroy vault
     }
 }
 ```
@@ -105,12 +116,8 @@ transaction(
 
 ## Usage Example
 ```cadence
-// Restake stFLOW rewards as FLOW-stFLOW LP with a 10.0 minimum restake amount
-// (No pool address param; uses IncrementFiStakingConnectors.borrowPool internally)
+// Restake stFLOW rewards as FLOW-stFLOW LP for pool 42 (no extra parameters)
 restakeRewards(
-    pid: 42,
-    rewardTokenType: Type<@StFlowToken.Vault>(),
-    pairTokenType: Type<@FlowToken.Vault>(),
-    minimumRestakedAmount: 10.0
+    pid: 42
 )
 ```

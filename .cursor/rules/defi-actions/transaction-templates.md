@@ -356,60 +356,60 @@ import "IncrementFiPoolLiquidityConnectors"
 import "Staking"
 
 transaction(
-    pid: UInt64,
-    rewardTokenType: Type,
-    pairTokenType: Type,
-    minimumRestakedAmount: UFix64,
+    pid: UInt64
 ) {
     let userCertificateCap: Capability<&Staking.UserCertificate>
     let pool: &{Staking.PoolPublic}
     let startingStake: UFix64
+    let swapSource: SwapConnectors.SwapSource
+    let expectedStakeIncrease: UFix64
     
-    prepare(acct: auth(BorrowValue, SaveValue) &Account) {
-        // Issue user certificate capability
+    prepare(acct: auth(BorrowValue, SaveValue, IssueStorageCapabilityController) &Account) {
         self.userCertificateCap = acct.capabilities.storage
             .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
         
-        // Borrow the pool and record starting stake
         self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
-            ?? panic("Pool with ID \\(".concat(pid.toString()).concat(") not found or not accessible"))
+            ?? panic("Pool with ID \(".concat(pid.toString()).concat(") not found or not accessible"))
         
         self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount 
-            ?? panic("No user info found for address \\(".concat(acct.address.toString()).concat(")"))
-    }
-    
-    execute {
-        // Rewards Source
+            ?? panic("No user info found for address \(".concat(acct.address.toString()).concat(")"))
+
+        let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
+            ?? panic("Pair with ID \(pid) not found or not accessible")
+
+        let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
+            token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
+            token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
+            stableMode: pair.getPairInfoStruct().isStableswap,
+            uniqueID: nil
+        )
+        
         let poolRewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
             userCertificate: self.userCertificateCap,
             pid: pid,
             uniqueID: nil
         )
         
-        // Zapper (reward token -> LP token)
-        let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
-            token0Type: rewardTokenType,
-            token1Type: pairTokenType,
-            stableMode: false,
-            uniqueID: nil
-        )
-        
-        // Swap source combining rewards -> LP
-        let lpTokenPoolRewardsSource = SwapConnectors.SwapSource(
+        self.swapSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: poolRewardsSource,
             uniqueID: nil
         )
-        
-        // Pool sink to restake LP tokens
+
+        self.expectedStakeIncrease = zapper.quoteOut(
+            forProvided: poolRewardsSource.minimumAvailable(),
+            reverse: false
+        ).outAmount
+    }
+    
+    execute {
         let poolSink = IncrementFiStakingConnectors.PoolSink(
             pid: pid,
             staker: self.userCertificateCap.address,
             uniqueID: nil
         )
         
-        // Execute: withdraw LP and deposit back into pool
-        let vault <- lpTokenPoolRewardsSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
+        let vault <- self.swapSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
         poolSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
         
         assert(vault.balance == 0.0, message: "Vault should be empty after withdrawal - restaking may have failed")
@@ -418,8 +418,8 @@ transaction(
     
     post {
         self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount 
-            >= self.startingStake + minimumRestakedAmount:
-            "Restaking failed: restaked amount is below the minimum restaked amount"
+            >= self.startingStake + self.expectedStakeIncrease:
+            "Restaking failed: restaked amount is below the expected amount"
     }
 }
 
@@ -445,7 +445,7 @@ This variant duplicates the complete workflow above. To avoid redundancy, see:
 - Always validate input parameters
 - Use meaningful error messages
 - Keep conditions as single expressions
-- Prefer user-provided minimum expected change for post-conditions (e.g., `minimumRestakedAmount`, `minimumReceivedAmount`) rather than computing expectations in the transaction body
+- For generic swap/transfer templates, prefer user-provided minimum expected change (e.g., `minimumReceivedAmount`). For the canonical restake workflow, compute `expectedStakeIncrease` from connector quotes and assert against it (no extra parameter).
 
 ### Resource Handling
 - Always verify complete transfers

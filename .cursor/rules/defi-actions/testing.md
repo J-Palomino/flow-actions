@@ -86,16 +86,11 @@ access(all) fun testRestakingWorkflow() {
     // Generate rewards
     advanceTime(seconds: 86400)  // 1 day
     
-    // Execute restaking workflow
+    // Execute restaking workflow (minimal parameters)
     let txResult = executeTransaction(
         "restaking_workflow.cdc",
         [
-            42 as UInt64,                      // pid
-            poolOperator.address,              // poolCollectionAddress
-            Type<@FlowToken.Vault>(),          // rewardTokenType
-            Type<@FlowToken.Vault>(),          // token0Type
-            Type<@USDC.Vault>(),              // token1Type
-            0.01 as UFix64                     // slippageTolerance
+            42 as UInt64  // pid
         ],
         user
     )

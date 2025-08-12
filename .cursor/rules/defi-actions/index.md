@@ -3,11 +3,11 @@
 > **AI Agent Navigation**: This documentation is structured for optimal crawling and indexing. Each file has a clear purpose and defined scope. Cross-references use consistent anchor linking patterns.
 
 ## ⚡ Quick Links
+- ENTRYPOINT for agents: [`defiactions-agent-quick-rules.mdc`](./defiactions-agent-quick-rules.mdc)
 - Restake Rewards: [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md)
 - Restake Transaction Template: [`transaction-templates.md`](./transaction-templates.md#complete-restaking-workflow)
 - Connectors used in Restake: [`connectors.md`](./connectors.md#quick-reference-restaking)
-- Agent Guidance: [`agent-rules.md`](./agent-rules.md)
-- Agent Quick Rules (pasteable): [`defiactions-agent-quick-rules.mdc`](./defiactions-agent-quick-rules.mdc)
+- Agent Guidance (extended): [`agent-rules.md`](./agent-rules.md)
 - Checklist: [`quick-checklist.md`](./quick-checklist.md)
 
 ## 🧱 Core Framework
