@@ -13,7 +13,7 @@
 import "FungibleToken"
 import "DeFiActions"
 
-access(all) contract ExampleConnector {
+access(all) contract ExampleConnectors {
     // TokenSink: A simple Sink that deposits everything it receives
     access(all) struct TokenSink: DeFiActions.Sink {
         // Capability to a receiver that can accept withdrawals of the matching vault type
