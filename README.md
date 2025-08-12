@@ -31,6 +31,14 @@ Key example:
 
 You can run locally on the emulator or target testnet/mainnet. String-based imports resolve when the target network is running and dependencies are deployed or aliased in `flow.json`.
 
+### Install Cadence dependencies (required)
+
+Install all declared dependencies from `flow.json` right after cloning locally:
+```bash
+flow deps install
+```
+See the Flow CLI Dependency Manager docs for details: [Dependency Manager](https://developers.flow.com/tools/flow-cli/dependency-manager).
+
 ### Option A: Emulator (local)
 
 1) Start the emulator (terminal A):
