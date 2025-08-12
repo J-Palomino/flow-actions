@@ -1,4 +1,4 @@
-// Contract: MyConnector
+// Contract: ExampleConnectors
 // Purpose: Minimal example of a DeFiActions Sink implementation that accepts any
 //          fungible token vault type and deposits it into a provided vault capability.
 //
@@ -15,6 +15,8 @@ import "DeFiActions"
 
 access(all) contract ExampleConnectors {
     // TokenSink: A simple Sink that deposits everything it receives
+    // NOTE: In practice, this should not be used as it is essentially a duplicate
+    // of the standard FungibleTokenConnectors.VaultSink connector.
     access(all) struct TokenSink: DeFiActions.Sink {
         // Capability to a receiver that can accept withdrawals of the matching vault type
         access(contract) let vault: Capability<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>
