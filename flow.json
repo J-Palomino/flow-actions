@@ -1,7 +1,7 @@
 {
 	"contracts": {
-		"ExampleConnector": {
-			"source": "cadence/contracts/ExampleConnector.cdc",
+		"ExampleConnectors": {
+			"source": "cadence/contracts/ExampleConnectors.cdc",
 			"aliases": {
 				"testing": "0000000000000007"
 			}
@@ -412,7 +412,7 @@
 	"deployments": {
 		"emulator": {
 			"emulator-account": [
-				"ExampleConnector",
+				"ExampleConnectors",
 				"DeFiActions",
 				"DeFiActionsUtils",
 				"DeFiActionsMathUtils",
