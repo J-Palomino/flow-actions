@@ -4,7 +4,7 @@
 **Components**: PoolRewardsSource → SwapSource(Zapper) → PoolSink  
 **Related**: [Pattern 1](../patterns.md#pattern-1-restaking-workflow)
 
-> Note: The canonical restake transaction derives the expected restake delta from connector quotes (no user-supplied minimum parameter). It asserts that the final stake is at least the starting stake plus the computed `expectedStakeIncrease`.
+> **NOTE**: The canonical restake transaction derives the expected restake delta from connector quotes (no user-supplied minimum parameter). It asserts that the final stake is at least the starting stake plus the computed `expectedStakeIncrease`.
 
 ## Required Imports
 ```cadence
@@ -83,7 +83,7 @@ transaction(
 
     post {
         self.pool.getUserInfo(address: self.staker)!.stakingAmount >= self.startingStake + self.expectedStakeIncrease:
-            "Restaking failed: restaked amount below the expected amount"
+            "Restaking failed: restaked amount of \(self.pool.getUserInfo(address: self.staker)!.stakingAmount - self.startingStake) is below the expected restaked amount of \(self.expectedStakeIncrease)"
     }
 
     execute {

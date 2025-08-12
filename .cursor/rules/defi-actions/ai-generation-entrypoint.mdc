@@ -27,6 +27,7 @@ import "Staking"
 - **Swapper**: Converts tokens; `inType()`, `outType()`, `quoteIn/quoteOut`, `swap`, `swapBack`.
 - **SwapSource**: `SwapConnectors.SwapSource(swapper, source)` → behaves like a Source of the swapper’s outType.
 - **UniqueIdentifier**: Optional ID for tracing stack operations; not required for basic flows.
+- See inherited members you must implement when creating connectors: [interface-inheritance.md](./interface-inheritance.md)
 
 ## Connector APIs you will use
 - `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate: Capability<&Staking.UserCertificate>, pid: UInt64, uniqueID: DeFiActions.UniqueIdentifier?)`
@@ -59,6 +60,9 @@ transaction(
         self.userCertificateCap = acct.capabilities.storage
             .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
 
+        // Create a unique identifier for tracing this composed operation
+        let operationID = DeFiActions.createUniqueIdentifier()
+
         let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
             ?? panic("Pair with ID \(pid) not found or not accessible")
 
@@ -66,16 +70,16 @@ transaction(
             token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
             token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
             stableMode: pair.getPairInfoStruct().isStableswap,
-            uniqueID: nil
+            uniqueID: operationID
         )
         let lpSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: IncrementFiStakingConnectors.PoolRewardsSource(
                 userCertificate: self.userCertificateCap,
                 pid: pid,
-                uniqueID: nil
+                uniqueID: operationID
             ),
-            uniqueID: nil
+            uniqueID: operationID
         )
 
         self.swapSource = lpSource
@@ -89,7 +93,7 @@ transaction(
         let poolSink = IncrementFiStakingConnectors.PoolSink(
             pid: pid,
             staker: self.userCertificateCap.address,
-            uniqueID: nil
+            uniqueID: operationID
         )
 
         let vault <- self.swapSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
@@ -114,6 +118,7 @@ transaction(
 - Use `source.minimumAvailable()` and `sink.minimumCapacity()` instead of manual math.
 - Prefer protocol helpers (e.g., `borrowPool(pid:)`) over raw address params.
 - Match types: `source.getSourceType() == swapper.inType()`, `swapper.outType() == sink.getSinkType()`; rely on constructor preconditions.
+- Use a single `uniqueID` across `PoolRewardsSource`, `Zapper`, `SwapSource`, and `PoolSink`.
 
 ## Style & naming
 - Use named args and descriptive identifiers: `poolRewardsSource`, `zapper`, `lpSource`, `poolSink`.
@@ -122,7 +127,7 @@ transaction(
 - Comment for humans: add short block headers (`prepare`, `pre`, `post`, `execute`) and one-line intent/safety comments for key steps (connector construction, withdraw/deposit, assertions).
 
 ---
-Deep-dive references: [agent-rules.md](./agent-rules.md) • [quick-checklist.md](./quick-checklist.md) • [connectors.md](./connectors.md)
+Deep-dive references: [ai-generation-guide.md](./ai-generation-guide.md) • [quick-checklist.md](./quick-checklist.md) • [connectors.md](./connectors.md)
 
 # DeFiActions Agent Rules (Cursor)
 
@@ -148,6 +153,7 @@ import "Staking"
 - **Swapper**: Converts tokens; `inType()`, `outType()`, `quoteIn/quoteOut`, `swap`, `swapBack`.
 - **SwapSource**: `SwapConnectors.SwapSource(swapper, source)` → behaves like a Source of the swapper’s outType.
 - **UniqueIdentifier**: Optional ID for tracing stack operations; not required for basic flows.
+- See inherited members you must implement when creating connectors: [interface-inheritance.md](./interface-inheritance.md)
 
 ## Connector APIs you will use
 - `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate: Capability<&Staking.UserCertificate>, pid: UInt64, uniqueID: DeFiActions.UniqueIdentifier?)`
@@ -180,6 +186,9 @@ transaction(
         self.userCertificateCap = acct.capabilities.storage
             .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
 
+        // Create a unique identifier for tracing this composed operation
+        let operationID = DeFiActions.createUniqueIdentifier()
+
         let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
             ?? panic("Pair with ID \(pid) not found or not accessible")
 
@@ -187,16 +196,16 @@ transaction(
             token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
             token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
             stableMode: pair.getPairInfoStruct().isStableswap,
-            uniqueID: nil
+            uniqueID: operationID
         )
         let lpSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: IncrementFiStakingConnectors.PoolRewardsSource(
                 userCertificate: self.userCertificateCap,
                 pid: pid,
-                uniqueID: nil
+                uniqueID: operationID
             ),
-            uniqueID: nil
+            uniqueID: operationID
         )
 
         self.swapSource = lpSource
@@ -210,7 +219,7 @@ transaction(
         let poolSink = IncrementFiStakingConnectors.PoolSink(
             pid: pid,
             staker: self.userCertificateCap.address,
-            uniqueID: nil
+            uniqueID: operationID
         )
 
         let vault <- self.swapSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
@@ -235,6 +244,7 @@ transaction(
 - Use `source.minimumAvailable()` and `sink.minimumCapacity()` instead of manual math.
 - Prefer protocol helpers (e.g., `borrowPool(pid:)`) over raw address params.
 - Match types: `source.getSourceType() == swapper.inType()`, `swapper.outType() == sink.getSinkType()`; rely on constructor preconditions.
+- Use a single `uniqueID` across `PoolRewardsSource`, `Zapper`, `SwapSource`, and `PoolSink`.
 
 ## Style & naming
 - Use named args and descriptive identifiers: `poolRewardsSource`, `zapper`, `lpSource`, `poolSink`.
@@ -243,4 +253,4 @@ transaction(
 - Comment for humans: add short block headers (`prepare`, `pre`, `post`, `execute`) and one-line intent/safety comments for key steps (connector construction, withdraw/deposit, assertions).
 
 ---
-Deep-dive references: [agent-rules.md](./agent-rules.md) • [quick-checklist.md](./quick-checklist.md) • [connectors.md](./connectors.md)
+Deep-dive references: [ai-generation-guide.md](./ai-generation-guide.md) • [quick-checklist.md](./quick-checklist.md) • [connectors.md](./connectors.md)

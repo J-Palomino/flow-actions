@@ -5,7 +5,7 @@ This repository is a scaffold for building with Flow Actions (DeFiActions) and i
 - **What’s included**:
   - Minimal Flow project with dependencies for DeFiActions and IncrementFi connectors
   - Example transaction: Claim → Zap → Restake for IncrementFi LP rewards
-  - Opinionated safety/style rules for agent-assisted transaction composition
+  - Cursor rules context for DeFiActions; helpful for agent-assisted development ([Cursor Rules](https://docs.cursor.com/en/context/rules))
 
 References:
 - FLIP-338: Flow Actions – composable standards for protocols ([onflow/FLIPs](https://github.com/onflow/FLIPs))
@@ -43,7 +43,7 @@ See the Flow CLI Dependency Manager docs for details: [Dependency Manager](https
 
 1) Start the emulator (terminal A):
 ```bash
-flow emulator start --init --simple
+flow emulator
 ```
 
 2) Deploy configured contracts (terminal B):
@@ -60,6 +60,43 @@ Notes:
 1) Create or configure a testnet account in `flow.json` (or via `flow accounts create --network testnet`).
 2) Ensure dependencies in `flow.json` include `testnet` aliases (this scaffold includes many prefilled).
 3) No local deploy is required for contracts that already exist on testnet; imports use the configured addresses.
+
+## 🔧 Deploying connectors
+
+- **Emulator (local)**: Contracts listed under `deployments.emulator` in `flow.json` (e.g., `DeFiActions`, `IncrementFiStakingConnectors`, `IncrementFiPoolLiquidityConnectors`, `SwapConnectors`, `Staking`, etc.) are deployed to your local dev account when you run:
+```bash
+flow project deploy --network emulator
+```
+If you restart the emulator, redeploy.
+
+- **Testnet/Mainnet**: Connectors are already deployed and referenced via `dependencies.aliases` in `flow.json`. You usually do not deploy them yourself. If you maintain custom forks, update `flow.json` aliases and deploy with your signer.
+
+## 🧑‍💼 Prepare your account
+
+- **Emulator**: Use the built-in `emulator-account` (pre-funded). No action needed.
+- **Testnet**:
+  1) Create an account:
+     ```bash
+     flow accounts create --network testnet
+     ```
+  2) Add a signer alias in `flow.json` under `accounts` with its address and key file:
+     ```json
+     {
+       "accounts": {
+         "testnet-account": {
+           "address": "<YOUR_TESTNET_ADDRESS>",
+           "key": { "type": "file", "location": "testnet-account.pkey" }
+         }
+       }
+     }
+     ```
+  3) Fund it via the Testnet Faucet: [testnet-faucet.onflow.org](https://testnet-faucet.onflow.org)
+- **Mainnet**:
+  1) Add your mainnet account to `flow.json` under `accounts` (address + key file or env). Docs: [Flow CLI Accounts](https://developers.flow.com/tools/flow-cli/accounts) | [Keys](https://developers.flow.com/tools/flow-cli/keys)
+  2) Ensure sufficient FLOW for fees and storage. See [Fees](https://developers.flow.com/build/basics/fees) and your wallet provider.
+
+Protocol requirement:
+- Ensure the signer has `Staking.UserCertificate` at `Staking.UserCertificateStoragePath`. If already staking in the target IncrementFi pool, you likely have one; otherwise follow the IncrementFi staking docs to initialize it.
 
 ## ▶️ Run the IncrementFi Restake Transaction
 
@@ -87,35 +124,35 @@ flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
   --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
 ```
 
+Mainnet example (replace `mainnet-account` with your signer alias):
+```bash
+flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
+  --network mainnet \
+  --signer mainnet-account \
+  --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
+```
+
 Requirements:
 - Signer must have `Staking.UserCertificate` at `Staking.UserCertificateStoragePath`.
 - `pid` must be a valid pool with rewards and a corresponding pair.
+- Ensure `flow deps install` has been run after cloning so string-based imports resolve via `flow.json` aliases.
+- On mainnet, ensure your signer has sufficient FLOW for tx and storage; verify connector addresses match `flow.json` dependencies.
 
-## 🧭 Agent-Friendly Rules (for AI-assisted generation)
+## 🧭 DeFiActions Composition (quick reference)
 
-Minimal restake flow uses string imports and standardized connectors:
-```cadence
-import "FungibleToken"
-import "DeFiActions"
-import "SwapConnectors"
-import "IncrementFiStakingConnectors"
-import "IncrementFiPoolLiquidityConnectors"
-import "Staking"
-```
-
-Core composition (Claim → Zap → Stake):
+Minimal restake flow connectors used in `cadence/transactions/IncrementFi_Restake.cdc`:
 - Source: `IncrementFiStakingConnectors.PoolRewardsSource`
 - Swapper: `IncrementFiPoolLiquidityConnectors.Zapper` (token types and `stableMode` from pair)
 - SwapSource: `SwapConnectors.SwapSource(swapper, source)`
 - Sink: `IncrementFiStakingConnectors.PoolSink`
 
-Safety invariants to follow:
-- Size withdraws by sink capacity: `withdrawAvailable(maxAmount: sink.minimumCapacity())`
-- Assert residuals: `vault.balance == 0.0` before destroy
-- Single-expression `pre`/`post` checks
-- Use protocol helpers like `borrowPool(pid:)` and `borrowPairPublicByPid(pid:)`
+String-based imports are used throughout (see file for full example). Safety invariants: size withdraws by sink capacity, assert residuals, single-expression pre/post.
 
-See `cadence/transactions/IncrementFi_Restake.cdc` for a complete example.
+## 💬 Example AI prompts
+- "Create me a Cadence transaction which restakes my Increment Fi LP token staking rewards"
+- "Generate a minimal restake transaction using DeFiActions connectors (PoolRewardsSource → Zapper via SwapSource → PoolSink) with string imports and safety invariants"
+- "Compose a SwapSource from PoolRewardsSource and IncrementFiPoolLiquidityConnectors.Zapper, then stake to IncrementFiStakingConnectors.PoolSink with pre/post checks and residual assertion"
+- "Add a post condition verifying the stake increased by the expected zapper.quoteOut amount"
 
 ## 🧪 Testing
 

@@ -207,9 +207,11 @@ access(all) fun testHighVolumeOperations() {
 ### Mock VaultSource
 ```cadence
 access(all) struct MockVaultSource: DeFiActions.Source {
+    // IdentifiableStruct required field
+    access(contract) var uniqueID: DeFiActions.UniqueIdentifier?
+
     access(all) let balance: UFix64
     access(all) let tokenType: Type
-    access(all) let uniqueID: DeFiActions.UniqueIdentifier?
     
     init(balance: UFix64, tokenType: Type) {
         self.balance = balance
@@ -217,24 +219,26 @@ access(all) struct MockVaultSource: DeFiActions.Source {
         self.uniqueID = nil
     }
     
-    access(all) view fun getSourceType(): Type {
-        return self.tokenType
-    }
-    
-    access(all) fun minimumAvailable(): UFix64 {
-        return self.balance
-    }
-    
+    access(all) view fun getSourceType(): Type { self.tokenType }
+    access(all) fun minimumAvailable(): UFix64 { self.balance }
     access(FungibleToken.Withdraw) fun withdrawAvailable(maxAmount: UFix64): @{FungibleToken.Vault} {
         let withdrawAmount = maxAmount < self.balance ? maxAmount : self.balance
         return <-FlowToken.createEmptyVault(amount: withdrawAmount)
     }
+
+    // IdentifiableStruct functions
+    access(all) fun getComponentInfo(): DeFiActions.ComponentInfo {
+        DeFiActions.ComponentInfo(type: self.getType(), id: self.id(), innerComponents: [])
+    }
+    access(contract) view fun copyID(): DeFiActions.UniqueIdentifier? { self.uniqueID }
+    access(contract) fun setID(_ id: DeFiActions.UniqueIdentifier?) { self.uniqueID = id }
 }
 ```
 
 ### Mock Swapper
 ```cadence
 // Provide a mock implementing the DeFiActions.Swapper interface as needed by your tests
+// Ensure it includes IdentifiableStruct members (uniqueID, getComponentInfo, copyID, setID)
 ```
 
 ## Test Organization

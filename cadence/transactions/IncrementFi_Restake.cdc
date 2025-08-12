@@ -1,3 +1,10 @@
+// Transaction: IncrementFi_Restake
+// Purpose: Claim Increment Fi LP staking rewards, zap rewards into LP tokens, then
+//          immediately stake the LP back into the pool (restake) using DeFiActions connectors.
+// Safety Invariants Demonstrated:
+// - Size withdraws by sink.minimumCapacity and assert zero residuals
+// - Use protocol helpers to derive types/addresses
+// - Maintain pre/post checks on user stake for determinism
 import "FungibleToken"
 import "DeFiActions"
 import "SwapConnectors"

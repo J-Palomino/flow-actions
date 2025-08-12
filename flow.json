@@ -177,6 +177,14 @@
 				"testnet": "9a0766d93b6608b7"
 			}
 		},
+		"FungibleTokenConnectors": {
+			"source": "mainnet://1d9a619393e9fb53.FungibleTokenConnectors",
+			"hash": "01dd4a81d57f079316ff27e3980de1b895e2c50002e47d3c20f68bbf694e54b0",
+			"aliases": {
+				"mainnet": "1d9a619393e9fb53",
+				"testnet": "5a7b9cee9aaf4e4e"
+			}
+		},
 		"FungibleTokenMetadataViews": {
 			"source": "mainnet://f233dcee88fe0abe.FungibleTokenMetadataViews",
 			"hash": "dff704a6e3da83997ed48bcd244aaa3eac0733156759a37c76a58ab08863016a",
@@ -443,7 +451,8 @@
 				"FlowEVMBridgeTokenEscrow",
 				"FlowEVMBridgeTemplates",
 				"BandOracleConnectors",
-				"BandOracle"
+				"BandOracle",
+				"FungibleTokenConnectors"
 			]
 		}
 	}

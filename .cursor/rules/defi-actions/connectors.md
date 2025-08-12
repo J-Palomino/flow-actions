@@ -10,6 +10,13 @@ Jump to: [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md)
 
 ---
 
+> Note on inheritance: When a connector type says `struct X : DeFiActions.Source`, X must implement all members of `Source` plus the required members of `IdentifiableStruct` because `Source` extends `IdentifiableStruct`. You do NOT list `IdentifiableStruct` again. See [`interface-inheritance.md`](./interface-inheritance.md) for exact required fields and method shapes.
+
+## Helpers (IncrementFi)
+- `IncrementFiStakingConnectors.borrowPool(pid: UInt64): &{Staking.PoolPublic}?`
+- `IncrementFiStakingConnectors.borrowPairPublicByPid(pid: UInt64): &{SwapInterfaces.PairPublic}?`
+- `IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(_ tokenKey: String): Type`
+
 ## FungibleTokenConnectors
 
 ### VaultSource
@@ -56,7 +63,9 @@ SwapConnectors.SwapSource(
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
-Tip: When immediately depositing into a sink, size `withdrawAvailable(maxAmount:)` by the sink’s `minimumCapacity()`.
+Tips:
+- Size withdraws by the target sink’s capacity: `withdrawAvailable(maxAmount: sink.minimumCapacity())`.
+- `minimumAvailable()` returns an estimate based on `swapper.quoteOut(forProvided: source.minimumAvailable())`.
 
 ### SwapSink
 ```cadence
@@ -66,6 +75,9 @@ SwapConnectors.SwapSink(
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
+Notes:
+- `getSinkType()` is the swapper’s `inType()`.
+- `minimumCapacity()` uses `swapper.quoteIn(forDesired: sink.minimumCapacity())`.
 
 ### MultiSwapper
 ```cadence
@@ -76,6 +88,8 @@ SwapConnectors.MultiSwapper(
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
+Notes:
+- Routes to the optimal inner swapper; `quoteIn/quoteOut(reverse:)` and `swap/swapBack` accept a generic Quote or will self-quote.
 
 ## IncrementFi Connectors
 
@@ -106,6 +120,9 @@ IncrementFiStakingConnectors.PoolRewardsSource(
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
+Notes:
+- Assumes a single reward token type for the pool; reverts if multiple are defined.
+- May stake an empty vault to update unclaimed rewards, due to protocol limitations.
 
 ### PoolSource
 > Not implemented in `IncrementFiStakingConnectors.cdc`.
@@ -122,9 +139,15 @@ IncrementFiPoolLiquidityConnectors.Zapper(
 )
 ```
 Notes:
-- `Zapper.swapBack(quote:residual:)` converts LP back to token0 (the `inType`).
-- `Zapper.quoteIn` is a placeholder and only supports `UFix64.max`; prefer `quoteOut` and capacity-driven sizing.
+- `inType()` is token0; `outType()` is the LP vault type.
+- `quoteOut(reverse: false)` estimates LP from token0; `reverse: true` estimates token0 from LP.
+- `quoteIn` currently only supports `UFix64.max` as a placeholder.
+- `swapBack(quote:residual:)` converts LP back to token0 (the `inType`).
 
 ---
 
-For EVM and Band oracle adapters, see protocol-specific repositories; not required for the restaking workflow.
+## Observed usage patterns (from code/tests)
+- **Claim → Zap → Restake**: Size withdraws by sink capacity; compute `expectedStakeIncrease = zapper.quoteOut(forProvided: rewards.minimumAvailable(), reverse: false).outAmount` and assert post.
+- **SwapSource sizing**: `withdrawAvailable(maxAmount: sink.minimumCapacity())` keeps operations graceful and avoids reverts.
+- **MultiSwapper**: When no quote provided to `swap/swapBack`, it computes an optimal inner swapper and proceeds.
+- **Testing mocks**: When mocking `Source`/`Sink`/`Swapper`, include `IdentifiableStruct` members (`uniqueID`, `getComponentInfo`, `copyID`, `setID`).

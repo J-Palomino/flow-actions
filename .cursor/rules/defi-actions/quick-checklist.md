@@ -26,11 +26,20 @@
 - Swapper: `Zapper(token0Type: derived token0 from pair, token1Type: derived token1 from pair, stableMode: pair.isStableswap)`
 - Wrap: `SwapConnectors.SwapSource(swapper, source)`
 - Sink: `PoolSink(pid: pid, staker: userAddress)`
+- Unique ID: Create once (`operationID = DeFiActions.createUniqueIdentifier()`) and pass to all components.
 
 ## Validate
 - `source.minimumAvailable() > 0.0`
 - `sink.minimumCapacity() > 0.0`
 - Post: `newStake >= startingStake + expectedStakeIncrease`
+
+## Inheritance sanity (for new connectors)
+- If implementing `Source`, `Sink`, or `Swapper`, include:
+  - `access(contract) var uniqueID: DeFiActions.UniqueIdentifier?`
+  - `access(all) fun getComponentInfo(): DeFiActions.ComponentInfo`
+  - `access(contract) view fun copyID(): DeFiActions.UniqueIdentifier?`
+  - `access(contract) fun setID(_ id: DeFiActions.UniqueIdentifier?)`
+- Reference: [`interface-inheritance.md`](./interface-inheritance.md)
 
 ## Test
 - Zero amounts and `UFix64.max`
@@ -42,4 +51,4 @@
 - Restake Workflow: [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md)
 - Transaction Template: [`transaction-templates.md`](./transaction-templates.md#complete-restaking-workflow)
 - Connectors: [`connectors.md`](./connectors.md)
-- Agent Rules: [`agent-rules.md`](./agent-rules.md)
+- Agent Guide: [`ai-generation-guide.md`](./ai-generation-guide.md)

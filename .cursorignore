@@ -3,4 +3,4 @@ emulator-account.pkey
 .env
 
 # Pay attention to imports directory
-!imports/**
+!imports

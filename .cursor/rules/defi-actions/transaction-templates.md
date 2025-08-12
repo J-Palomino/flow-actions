@@ -1,6 +1,8 @@
 # Transaction Templates
 
-> Note: The canonical, end-to-end Restake transaction lives in `workflows/restaking-workflow.md`. This page focuses on reusable, generic templates; see the workflow doc for the complete flow and rationale.
+> **NOTE**: The canonical end-to-end restake transaction lives in [workflows/restaking-workflow.md](./workflows/restaking-workflow.md). This page focuses on reusable, generic templates; see the workflow doc for the complete flow and rationale.
+
+> Implementers: When creating new connectors used by these templates, ensure you implement inherited members from `IdentifiableStruct`. See [`interface-inheritance.md`](./interface-inheritance.md).
 
 ## Basic Transfer Template
 
@@ -377,23 +379,25 @@ transaction(
         let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
             ?? panic("Pair with ID \(pid) not found or not accessible")
 
+        let operationID = DeFiActions.createUniqueIdentifier()
+
         let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
             token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
             token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
             stableMode: pair.getPairInfoStruct().isStableswap,
-            uniqueID: nil
+            uniqueID: operationID
         )
         
         let poolRewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
             userCertificate: self.userCertificateCap,
             pid: pid,
-            uniqueID: nil
+            uniqueID: operationID
         )
         
         self.swapSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: poolRewardsSource,
-            uniqueID: nil
+            uniqueID: operationID
         )
 
         self.expectedStakeIncrease = zapper.quoteOut(
@@ -406,7 +410,7 @@ transaction(
         let poolSink = IncrementFiStakingConnectors.PoolSink(
             pid: pid,
             staker: self.userCertificateCap.address,
-            uniqueID: nil
+            uniqueID: operationID
         )
         
         let vault <- self.swapSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
@@ -426,8 +430,7 @@ transaction(
 ### Claim → Zap → Restake (Minimal Params)
 
 This variant duplicates the complete workflow above. To avoid redundancy, see:
-- Canonical workflow: `workflows/restaking-workflow.md`
-- Quick template: the "Complete Restaking Workflow" section immediately above
+- Canonical workflow: [workflows/restaking-workflow.md](./workflows/restaking-workflow.md)
 
 ## Template Usage Guidelines
 

@@ -1,16 +1,17 @@
 # Cursor Agent Rules
 
-> NOTE: Extended reference for agents and reviewers. The single canonical entry point is [`defiactions-agent-quick-rules.mdc`](./defiactions-agent-quick-rules.mdc). Start there for generation; use this page for deeper rationale and expanded guidance.
+> NOTE: Extended reference for agents and reviewers. The single canonical entry point is [`ai-generation-entrypoint.mdc`](./ai-generation-entrypoint.mdc). Start there for generation; use this page for deeper rationale and expanded guidance.
 
 These rules guide AI agents to generate correct, safe Cadence transactions using DeFiActions connectors.
 
 ## Quick Entry
-- Pasteable rules for `.cursor/rules`: [defiactions-agent-quick-rules.mdc](./defiactions-agent-quick-rules.mdc)
+- Pasteable rules for `.cursor/rules`: [ai-generation-entrypoint.mdc](./ai-generation-entrypoint.mdc)
 - Canonical restake workflow: [workflows/restaking-workflow.md](./workflows/restaking-workflow.md)
 - Connectors overview: [connectors.md](./connectors.md)
 - Composition patterns: [composition.md](./composition.md)
 - Transaction templates: [transaction-templates.md](./transaction-templates.md)
 - Checklist: [quick-checklist.md](./quick-checklist.md) • Safety: [safety-rules.md](./safety-rules.md)
+- Inheritance reference: [interface-inheritance.md](./interface-inheritance.md)
 
 ## Goal Translation
 - Map prompts to a connector chain.
@@ -41,11 +42,12 @@ import "Staking"
 - Prepare:
   - Issue `Capability<&Staking.UserCertificate>`.
   - Borrow pool via `IncrementFiStakingConnectors.borrowPool(pid:)` and record `startingStake`.
-  - Borrow pair via `IncrementFiStakingConnectors.borrowPairPublicByPid(pid:)` and construct `Zapper` using derived token types and `stableMode`.
-  - Create `PoolRewardsSource` and wrap with `SwapConnectors.SwapSource`.
+  - Create `operationID = DeFiActions.createUniqueIdentifier()`.
+  - Borrow pair via `IncrementFiStakingConnectors.borrowPairPublicByPid(pid:)` and construct `Zapper` using derived token types and `stableMode`, with `uniqueID: operationID`.
+  - Create `PoolRewardsSource(userCertificate, pid, uniqueID: operationID)` and wrap with `SwapConnectors.SwapSource(..., uniqueID: operationID)`.
   - Compute `expectedStakeIncrease` via `zapper.quoteOut(forProvided: rewards.minimumAvailable(), reverse: false)`.
 - Execute:
-  - `PoolSink(pid: pid, staker: userAddress, uniqueID: nil)`.
+  - `PoolSink(pid: pid, staker: userAddress, uniqueID: operationID)`.
   - Size withdraws by the target sink’s capacity: `withdrawAvailable(maxAmount: poolSink.minimumCapacity())`.
   - Deposit, assert vault empty, destroy.
 - Post:
@@ -56,12 +58,23 @@ import "Staking"
 - Use `depositCapacity` and `withdrawAvailable` for graceful handling.
 - Verify `vault.balance == 0.0` before `destroy`.
 - Do not resolve protocol addresses in transactions if a connector provides helpers.
+- Use a single `uniqueID` across composed connectors for traceability.
 
 ## Connector Facts
 - `IncrementFiStakingConnectors.PoolSink(pid, staker, uniqueID?)` infers `vaultType` from pool.
 - `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate, pid, uniqueID?)` outputs inferred reward `vaultType`.
 - `IncrementFiPoolLiquidityConnectors.Zapper` is a `Swapper`; use `swap(quote:inVault:)` and `swapBack` as needed. There is no separate `UnZapper` type.
 - `SwapConnectors.SwapSource(swapper, source, uniqueID?)` exposes post-conversion as a `Source`.
+- Observed: `Zapper.quoteIn` only supports `UFix64.max`; prefer capacity-driven sizing via `quoteOut` and sink capacities.
+- Observed: `MultiSwapper.swap/swapBack` will self-quote if given a non-MultiSwapper quote or `nil`.
+
+## Common Pitfall: Inherited members
+- If a struct implements `Source`, `Sink`, or `Swapper`, it inherits from `IdentifiableStruct`. You must implement:
+  - `access(contract) var uniqueID: DeFiActions.UniqueIdentifier?`
+  - `access(all) fun getComponentInfo(): DeFiActions.ComponentInfo`
+  - `access(contract) view fun copyID(): DeFiActions.UniqueIdentifier?`
+  - `access(contract) fun setID(_ id: DeFiActions.UniqueIdentifier?)`
+- See details and skeletons: [interface-inheritance.md](./interface-inheritance.md)
 
 ## Common Variations
 - Stable pool: set `stableMode` from pair info.

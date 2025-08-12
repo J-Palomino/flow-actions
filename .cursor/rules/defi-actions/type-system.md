@@ -49,10 +49,15 @@ depositCapacity(from: auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 
 ### Swapper Interface Methods
 ```cadence
-getFromType(): Type
-getToType(): Type
-swap(from: @{FungibleToken.Vault}): @{FungibleToken.Vault}
+inType(): Type
+outType(): Type
+quoteIn(forDesired: UFix64, reverse: Bool): {DeFiActions.Quote}
+quoteOut(forProvided: UFix64, reverse: Bool): {DeFiActions.Quote}
+swap(quote: {DeFiActions.Quote}?, inVault: @{FungibleToken.Vault}): @{FungibleToken.Vault}
+swapBack(quote: {DeFiActions.Quote}?, residual: @{FungibleToken.Vault}): @{FungibleToken.Vault}
 ```
+
+Note: Method names and parameter shapes above match `cadence/contracts/interfaces/DeFiActions.cdc`. Prefer using these exact forms to avoid interface conformance errors.
 
 ## Account Entitlements
 
