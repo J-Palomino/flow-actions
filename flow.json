@@ -412,7 +412,7 @@
 	"deployments": {
 		"emulator": {
 			"emulator-account": [
-				"Counter",
+				"ExampleConnector",
 				"DeFiActions",
 				"DeFiActionsUtils",
 				"DeFiActionsMathUtils",
