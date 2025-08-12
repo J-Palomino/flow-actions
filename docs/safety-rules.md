@@ -10,8 +10,8 @@
 ```cadence
 import "FungibleToken"
 import "DeFiActions" 
-import "FungibleTokenStack"
-import "SwapStack"
+import "FungibleTokenConnectors"
+import "SwapConnectors"
 import "IncrementFiStakingConnectors"
 ```
 
@@ -19,6 +19,25 @@ import "IncrementFiStakingConnectors"
 ```cadence
 import FungibleToken from 0x123456789abcdef0    // COMPILE ERROR
 import DeFiActions from 0x123456789abcdef0      // COMPILE ERROR
+```
+
+## Transaction Layout Order (READABILITY)
+**Enforcement**: Convention  
+**Criticality**: HIGH for reviewability
+
+- Write transaction blocks in this physical order: `prepare` → `pre` → `post` → `execute`.
+- Rationale: enables quick “audit-style” reading of inputs, setup, and guarantees before scanning execution.
+- Skeleton:
+```cadence
+transaction(...) {
+    prepare(acct: auth(...) &Account) { /* setup & capability issuance */ }
+    
+    pre { /* single boolean expression checks on inputs */ }
+    
+    post { /* single boolean expression for outcome guarantee */ }
+    
+    execute { /* business logic using connectors */ }
+}
 ```
 
 ## Critical Pre/Post-Condition Rules
@@ -39,7 +58,7 @@ transaction(pid: UInt64, minimumRestakedAmount: UFix64) {
     let startingStake: UFix64
 
     prepare(acct: auth(BorrowValue) &Account) {
-        self.pool = IncrementFiStakingConnectors.borrowPool(poolID: pid)
+        self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
             ?? panic("Pool not accessible")
         self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
             ?? panic("No user info")

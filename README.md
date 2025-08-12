@@ -181,3 +181,55 @@ This command will deploy your project to Flow Mainnet. You can now interact with
 - [Flow Community Forum](https://forum.flow.com/)
 - [Flow Discord](https://discord.gg/flow)
 - [Flow Twitter](https://x.com/flow_blockchain)
+
+## Claim → Zap → Restake (stFLOW → FLOW-stFLOW LP)
+
+A ready-to-use transaction is provided at `cadence/transactions/ClaimZapRestake_stFLOW.cdc`.
+It claims your Increment Fi farm rewards (e.g., stFLOW), zaps them into FLOW–stFLOW LP tokens, and restakes back into the same pool.
+
+Parameters:
+- `pid: UInt64` – Increment Fi pool ID (the farm you’re restaking into)
+- `rewardTokenType: Type` – Reward token Type (e.g., stFLOW Vault type)
+- `pairTokenType: Type` – Pair token Type (e.g., FLOW Vault type)
+- `minimumRestakedAmount: UFix64` – Required minimum increase in staked LP to accept the tx
+
+Important: you must map external contracts in `flow.json` so imports resolve:
+
+Example core aliases (fill in networks you use):
+```json
+{
+  "contracts": {
+    "FungibleToken": {
+      "aliases": {
+        "emulator": "0xee82856bf20e2aa6",
+        "testnet": "0x9a0766d93b6608b7",
+        "mainnet": "0xf233dcee88fe0abe"
+      }
+    },
+    "FlowToken": {
+      "aliases": {
+        "emulator": "0x0ae53cb6e3f42a79",
+        "testnet": "0x7e60df042a9c0868",
+        "mainnet": "0x1654653399040a61"
+      }
+    }
+  }
+}
+```
+
+You also need to add Increment Fi contracts (addresses differ by network; see Increment docs):
+- `Staking`
+- `IncrementFiStakingConnectors`
+- `IncrementFiPoolLiquidityConnectors`
+- `SwapStack`
+
+Usage notes:
+- For FLOW–stFLOW, pass `pairTokenType` as the FLOW Vault type, and `rewardTokenType` as stFLOW Vault type.
+- The transaction uses `stableMode: false` in the zapper. If your target LP is a stableswap pool, adjust the transaction to `stableMode: true`.
+- Ensure your account has a `Staking.UserCertificate` capability path set up (the transaction issues one from the standard storage path).
+
+Run (example outline):
+- Use your preferred SDK (FCL) to pass `Type` parameters for `rewardTokenType` and `pairTokenType`.
+- Or adapt the template from `docs/transaction-templates.md` to your tooling if your CLI doesn’t support `Type` args directly.
+
+Refer to `docs/transaction-templates.md` → "Claim → Zap → Restake (Minimal Params)" for the composition pattern used.

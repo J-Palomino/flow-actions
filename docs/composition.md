@@ -7,7 +7,7 @@
 let source = ComponentSource(...)
 let sink = ComponentSink(...)
 
-let vault <- source.withdrawAvailable(maxAmount: amount)
+let vault <- source.withdrawAvailable(maxAmount: sink.minimumCapacity())
 sink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 assert(vault.balance == 0.0, message: "Transfer incomplete")
 destroy vault
@@ -19,7 +19,8 @@ let source = ComponentSource(...)
 let swapper = ComponentSwapper(...)
 let sink = ComponentSink(...)
 
-let inputVault <- source.withdrawAvailable(maxAmount: amount)
+// Prefer cap-driven sizing. For manual swaps, compute input via quoteIn for sink.minimumCapacity().
+let inputVault <- source.withdrawAvailable(maxAmount: source.minimumAvailable())
 let outputVault <- swapper.swap(quote: nil, inVault: <-inputVault)
 sink.depositCapacity(from: &outputVault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 assert(outputVault.balance == 0.0, message: "Transfer incomplete")
@@ -30,7 +31,7 @@ destroy outputVault
 
 ### SwapSource (Source + Swapper)
 ```cadence
-let swapSource = SwapStack.SwapSource(
+let swapSource = SwapConnectors.SwapSource(
     swapper: tokenSwapper,    // {Swapper}
     source: basicSource,      // {Source}
     uniqueID: operationID     // DeFiActions.UniqueIdentifier?
@@ -42,7 +43,7 @@ let vault <- swapSource.withdrawAvailable(maxAmount: amount)
 
 ### SwapSink (Swapper + Sink)
 ```cadence
-let swapSink = SwapStack.SwapSink(
+let swapSink = SwapConnectors.SwapSink(
     swapper: tokenSwapper,    // {Swapper}
     sink: basicSink,          // {Sink}
     uniqueID: operationID     // DeFiActions.UniqueIdentifier?
@@ -56,11 +57,11 @@ swapSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{Fungible
 
 ### Nested SwapSource
 ```cadence
-let complexSource = SwapStack.SwapSource(
+let complexSource = SwapConnectors.SwapSource(
     swapper: secondSwapper,                    // Final conversion
-    source: SwapStack.SwapSource(              // Nested SwapSource
+    source: SwapConnectors.SwapSource(         // Nested SwapSource
         swapper: firstSwapper,                 // Initial conversion
-        source: FungibleTokenStack.VaultSource(...),  // Base source
+        source: FungibleTokenConnectors.VaultSource(...),  // Base source
         uniqueID: operationID
     ),
     uniqueID: operationID
@@ -70,21 +71,21 @@ let complexSource = SwapStack.SwapSource(
 ### Chain: Vault → Swap → Swap → Stake
 ```cadence
 // Step 1: Base vault source
-let vaultSource = FungibleTokenStack.VaultSource(
+let vaultSource = FungibleTokenConnectors.VaultSource(
     min: 10.0,
     withdrawVault: userVaultCap,
     uniqueID: operationID
 )
 
 // Step 2: First swap (Token A → Token B)
-let firstSwapSource = SwapStack.SwapSource(
+let firstSwapSource = SwapConnectors.SwapSource(
     swapper: tokenAToTokenBSwapper,
     source: vaultSource,
     uniqueID: operationID
 )
 
 // Step 3: Second swap (Token B → LP Tokens)
-let lpSwapSource = SwapStack.SwapSource(
+let lpSwapSource = SwapConnectors.SwapSource(
     swapper: tokenBToLPSwapper,
     source: firstSwapSource,
     uniqueID: operationID
@@ -92,13 +93,13 @@ let lpSwapSource = SwapStack.SwapSource(
 
 // Step 4: Staking sink
 let stakingSink = IncrementFiStakingConnectors.PoolSink(
-    poolID: poolId,
+    pid: poolId,
     staker: userAddress,
     uniqueID: operationID
 )
 
 // Execute complete chain
-let vault <- lpSwapSource.withdrawAvailable(maxAmount: amount)
+let vault <- lpSwapSource.withdrawAvailable(maxAmount: stakingSink.minimumCapacity())
 stakingSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 ```
 
@@ -110,9 +111,13 @@ let autoBalancerSource = DeFiActions.AutoBalancerSource(
     autoBalancer: autoBalancerCap,  // Capability<&DeFiActions.AutoBalancer>
     uniqueID: operationID
 )
+let autoBalancerSink = DeFiActions.AutoBalancerSink(
+    autoBalancer: autoBalancerCap,
+    uniqueID: operationID
+)
 
 // Can be used in any Source position
-let vault <- autoBalancerSource.withdrawAvailable(maxAmount: amount)
+let vault <- autoBalancerSource.withdrawAvailable(maxAmount: autoBalancerSink.minimumCapacity())
 ```
 
 ### AutoBalancer as Sink
@@ -130,10 +135,10 @@ autoBalancerSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{
 ```cadence
 // Complex chain with AutoBalancer
 let rewardSource = PoolRewardsSource(...)
-let swapSource = SwapStack.SwapSource(swapper: zapper, source: rewardSource, uniqueID: nil)
+let swapSource = SwapConnectors.SwapSource(swapper: zapper, source: rewardSource, uniqueID: nil)
 let autoBalancerSink = DeFiActions.AutoBalancerSink(autoBalancer: balancerCap, uniqueID: nil)
 
-let vault <- swapSource.withdrawAvailable(maxAmount: UFix64.max)
+let vault <- swapSource.withdrawAvailable(maxAmount: autoBalancerSink.minimumCapacity())
 autoBalancerSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 ```
 

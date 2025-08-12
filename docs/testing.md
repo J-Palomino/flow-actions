@@ -13,7 +13,7 @@ access(all) fun testVaultSourceBasic() {
     let vaultCap = testAccount.capabilities.storage.issue<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>(/storage/flowTokenVault)
     
     // Create component
-    let source = FungibleTokenStack.VaultSource(
+    let source = FungibleTokenConnectors.VaultSource(
         min: 10.0,
         withdrawVault: vaultCap,
         uniqueID: nil
@@ -58,7 +58,7 @@ access(all) fun testVaultSourceErrors() {
     // Test invalid capability
     let invalidCap: Capability<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}> = nil
     Test.expectFailure(fun() {
-        let source = FungibleTokenStack.VaultSource(
+        let source = FungibleTokenConnectors.VaultSource(
             min: 0.0,
             withdrawVault: invalidCap,
             uniqueID: nil
@@ -90,7 +90,7 @@ access(all) fun testRestakingWorkflow() {
     let txResult = executeTransaction(
         "restaking_workflow.cdc",
         [
-            42 as UInt64,                      // poolId
+            42 as UInt64,                      // pid
             poolOperator.address,              // poolCollectionAddress
             Type<@FlowToken.Vault>(),          // rewardTokenType
             Type<@FlowToken.Vault>(),          // token0Type
@@ -120,7 +120,7 @@ access(all) fun testSwapSourceComposition() {
     )
     
     // Create composite
-    let swapSource = SwapStack.SwapSource(
+    let swapSource = SwapConnectors.SwapSource(
         swapper: swapper,
         source: source,
         uniqueID: nil
@@ -130,7 +130,7 @@ access(all) fun testSwapSourceComposition() {
     Test.expect(swapSource.getSourceType(), Test.equal(Type<@USDC.Vault>()))
     
     // Test execution
-    let vault <- swapSource.withdrawAvailable(maxAmount: 200.0)  // Request 200 USDC
+    let vault <- swapSource.withdrawAvailable(maxAmount: sink.minimumCapacity())  // Size by sink capacity
     Test.expect(vault.balance, Test.equal(200.0))  // Should get 200 USDC from 100 FLOW
     Test.expect(vault.getType(), Test.equal(Type<@USDC.Vault>()))
     
@@ -239,35 +239,7 @@ access(all) struct MockVaultSource: DeFiActions.Source {
 
 ### Mock Swapper
 ```cadence
-access(all) struct MockSwapper: DeFiActions.Swapper {
-    access(all) let fromType: Type
-    access(all) let toType: Type
-    access(all) let rate: UFix64
-    access(all) let uniqueID: DeFiActions.UniqueIdentifier?
-    
-    init(fromType: Type, toType: Type, rate: UFix64) {
-        self.fromType = fromType
-        self.toType = toType
-        self.rate = rate
-        self.uniqueID = nil
-    }
-    
-    access(all) view fun getFromType(): Type {
-        return self.fromType
-    }
-    
-    access(all) view fun getToType(): Type {
-        return self.toType
-    }
-    
-    access(all) fun swap(from: @{FungibleToken.Vault}): @{FungibleToken.Vault} {
-        let inputAmount = from.balance
-        destroy from
-        
-        let outputAmount = inputAmount * self.rate
-        return <-USDC.createEmptyVault(amount: outputAmount)
-    }
-}
+// Provide a mock implementing the DeFiActions.Swapper interface as needed by your tests
 ```
 
 ## Test Organization

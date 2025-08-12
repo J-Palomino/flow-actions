@@ -1,3 +1,11 @@
+---
+description: Default guidance for composing RPC-style Cadence transactions to interact with Flow DeFi protocols (staking, rewards, swaps, LP). Suitable as a general default for protocol interactions.
+globs:
+  - cadence/**/*.cdc
+  - docs/**/*.md
+  - flow.json
+alwaysApply: false
+---
 # Cursor Agent Rules
 
 These rules guide AI agents to generate correct, safe Cadence transactions using DeFiActions connectors.
@@ -15,11 +23,15 @@ Always use string imports:
 ```cadence
 import "FungibleToken"
 import "DeFiActions"
-import "SwapStack"
+import "SwapConnectors"
 import "IncrementFiStakingConnectors"
 import "IncrementFiPoolLiquidityConnectors"
 import "Staking"
 ```
+
+## Transaction Block Order
+- Write in this physical order for readability: `prepare` → `pre` → `post` → `execute`.
+- Readers can audit inputs and guarantees before scanning execution logic.
 
 ## Required Params (Restake)
 - `pid: UInt64`
@@ -30,15 +42,15 @@ import "Staking"
 ## Transaction Skeleton
 - Prepare:
   - Issue `Capability<&Staking.UserCertificate>`.
-  - Borrow pool via `IncrementFiStakingConnectors.borrowPool(poolID:)`.
+  - Borrow pool via `IncrementFiStakingConnectors.borrowPool(pid:)`.
   - Record `startingStake` from `pool.getUserInfo(address:)`.
 - Execute:
-  - `PoolRewardsSource(userCertificate, pid, rewardTokenType, overflowSinks: {})`.
+  - `PoolRewardsSource(userCertificate, pid, uniqueID: nil)`.
   - `Zapper(token0Type: rewardTokenType, token1Type: pairTokenType, stableMode: false)`.
-  - `SwapSource(swapper: zapper, source: rewards)`.
-  - `PoolSink(poolID: pid, staker: userCertificateCap.address)`.
-  - Withdraw with `maxAmount: poolSink.minimumCapacity()` and deposit.
-  - Assert vault empty; destroy.
+  - `SwapConnectors.SwapSource(swapper: zapper, source: rewards, uniqueID: nil)`.
+  - `PoolSink(pid: pid, staker: userCertificateCap.address, uniqueID: nil)`.
+  - Size withdraws by the target sink’s capacity: `withdrawAvailable(maxAmount: poolSink.minimumCapacity())`.
+  - Deposit, assert vault empty, destroy.
 - Post:
   - Ensure `newStake >= startingStake + minimumRestakedAmount`.
 
@@ -49,13 +61,13 @@ import "Staking"
 - Do not resolve protocol addresses in transactions if a connector provides helpers.
 
 ## Connector Facts
-- `IncrementFiStakingConnectors.PoolSink(poolID, staker, uniqueID?)` infers `vaultType` from pool.
-- `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate, poolID, vaultType, overflowSinks, uniqueID?)` outputs `vaultType`.
+- `IncrementFiStakingConnectors.PoolSink(pid, staker, uniqueID?)` infers `vaultType` from pool.
+- `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate, pid, uniqueID?)` outputs inferred reward `vaultType`.
 - `IncrementFiPoolLiquidityConnectors.Zapper` is a `Swapper`; use `swap(quote:inVault:)` and `swapBack` as needed. There is no separate `UnZapper` type.
-- `SwapStack.SwapSource(swapper, source, uniqueID?)` exposes post-conversion as a `Source`.
+- `SwapConnectors.SwapSource(swapper, source, uniqueID?)` exposes post-conversion as a `Source`.
 
 ## Common Variations
-- Multiple reward tokens: supply `overflowSinks` mapping to route non-primary slices.
+- Multiple reward tokens: supply `overflowSinks` mapping to route non-primary slices.  // Note: when supported by specific pool connectors
 - Stable pool: set `stableMode: true` in `Zapper`.
 - Quote-driven caps: prefer `sink.minimumCapacity()`/`source.minimumAvailable()`; avoid manual slippage math.
 
@@ -74,4 +86,7 @@ import "Staking"
 - Imports present and string-based.
 - Capability issuance and borrows succeed or `panic` with context.
 - Connector inputs/outputs types align: `source.getSourceType()` == `swapper.inType()`, `swapper.outType()` == `sink.getSinkType()` (or rely on `SwapSource` construction preconditions).
-- Post-condition guards the intended outcome (`minimumRestakedAmount`). 
+- Post-condition guards the intended outcome (`minimumRestakedAmount`).
+
+---
+See also: [`connectors.md`](./connectors.md), [`composition.md`](./composition.md), [`quick-checklist.md`](./quick-checklist.md), [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md) 

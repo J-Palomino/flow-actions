@@ -7,6 +7,7 @@
 - Restake Transaction Template: [`transaction-templates.md`](./transaction-templates.md#complete-restaking-workflow)
 - Connectors used in Restake: [`connectors.md`](./connectors.md#quick-reference-restaking)
 - Agent Guidance: [`agent-rules.md`](./agent-rules.md)
+- Agent Quick Rules (pasteable): [`defiactions-agent-quick-rules.mdc`](./defiactions-agent-quick-rules.mdc)
 - Checklist: [`quick-checklist.md`](./quick-checklist.md)
 
 ## 🧱 Core Framework

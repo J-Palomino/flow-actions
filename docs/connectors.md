@@ -1,23 +1,23 @@
 # Connectors
 
 ## Quick Reference (Restaking)
-- Rewards Source: `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate, poolID, vaultType, overflowSinks, uniqueID?)`
+- Rewards Source: `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate, pid, uniqueID?)`
 - Zapper (to LP): `IncrementFiPoolLiquidityConnectors.Zapper(token0Type, token1Type, stableMode, uniqueID?)`
-- Swap wrapper: `SwapStack.SwapSource(swapper, source, uniqueID?)`
-- Staking Sink: `IncrementFiStakingConnectors.PoolSink(poolID, staker, uniqueID?)`
+- Swap wrapper: `SwapConnectors.SwapSource(swapper, source, uniqueID?)`
+- Staking Sink: `IncrementFiStakingConnectors.PoolSink(pid, staker, uniqueID?)`
 
 Jump to: [`workflows/restaking-workflow.md`](./workflows/restaking-workflow.md)
 
 ---
 
-## FungibleTokenStack Connectors
+## FungibleTokenConnectors
 
 ### VaultSource
 **Purpose**: Withdraws tokens from FungibleToken vault with minimum balance protection.  
 **Type**: `struct VaultSource : DeFiActions.Source`  
 **Constructor**:
 ```cadence
-FungibleTokenStack.VaultSource(
+FungibleTokenConnectors.VaultSource(
     min: UFix64?,
     withdrawVault: Capability<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>,
     uniqueID: DeFiActions.UniqueIdentifier?
@@ -29,7 +29,7 @@ FungibleTokenStack.VaultSource(
 **Type**: `struct VaultSink : DeFiActions.Sink`  
 **Constructor**:
 ```cadence
-FungibleTokenStack.VaultSink(
+FungibleTokenConnectors.VaultSink(
     max: UFix64?,
     depositVault: Capability<&{FungibleToken.Vault}>,
     uniqueID: DeFiActions.UniqueIdentifier?
@@ -38,7 +38,7 @@ FungibleTokenStack.VaultSink(
 
 ### VaultSinkAndSource
 ```cadence
-FungibleTokenStack.VaultSinkAndSource(
+FungibleTokenConnectors.VaultSinkAndSource(
     min: UFix64,
     max: UFix64?,
     vault: Capability<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>,
@@ -46,20 +46,21 @@ FungibleTokenStack.VaultSinkAndSource(
 )
 ```
 
-## SwapStack Connectors
+## SwapConnectors
 
 ### SwapSource
 ```cadence
-SwapStack.SwapSource(
+SwapConnectors.SwapSource(
     swapper: {DeFiActions.Swapper},
     source: {DeFiActions.Source},
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
+Tip: When immediately depositing into a sink, size `withdrawAvailable(maxAmount:)` by the sink’s `minimumCapacity()`.
 
 ### SwapSink
 ```cadence
-SwapStack.SwapSink(
+SwapConnectors.SwapSink(
     swapper: {DeFiActions.Swapper},
     sink: {DeFiActions.Sink},
     uniqueID: DeFiActions.UniqueIdentifier?
@@ -68,7 +69,7 @@ SwapStack.SwapSink(
 
 ### MultiSwapper
 ```cadence
-SwapStack.MultiSwapper(
+SwapConnectors.MultiSwapper(
     inVault: Type,
     outVault: Type,
     swappers: [{DeFiActions.Swapper}],
@@ -82,7 +83,7 @@ SwapStack.MultiSwapper(
 **Purpose**: Retrieve a reference to a staking pool without requiring a pool collection address parameter.  
 **Signature**:
 ```cadence
-IncrementFiStakingConnectors.borrowPool(poolID: UInt64): &{Staking.PoolPublic}?
+IncrementFiStakingConnectors.borrowPool(pid: UInt64): &{Staking.PoolPublic}?
 ```
 **Notes**:
 - Use this helper to minimize transaction parameters when targeting a known IncrementFi pool.
@@ -91,7 +92,7 @@ IncrementFiStakingConnectors.borrowPool(poolID: UInt64): &{Staking.PoolPublic}?
 ### PoolSink
 ```cadence
 IncrementFiStakingConnectors.PoolSink(
-    poolID: UInt64,
+    pid: UInt64,
     staker: Address,
     uniqueID: DeFiActions.UniqueIdentifier?
 )
@@ -101,9 +102,7 @@ IncrementFiStakingConnectors.PoolSink(
 ```cadence
 IncrementFiStakingConnectors.PoolRewardsSource(
     userCertificate: Capability<&Staking.UserCertificate>,
-    poolID: UInt64,
-    vaultType: Type,
-    overflowSinks: {Type: {DeFiActions.Sink}},
+    pid: UInt64,
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
@@ -122,9 +121,9 @@ IncrementFiPoolLiquidityConnectors.Zapper(
     uniqueID: DeFiActions.UniqueIdentifier?
 )
 ```
-
 Notes:
-- `Zapper.swapBack(quote:residual:)` converts LP back to the input token.
+- `Zapper.swapBack(quote:residual:)` converts LP back to token0 (the `inType`).
+- `Zapper.quoteIn` is a placeholder and only supports `UFix64.max`; prefer `quoteOut` and capacity-driven sizing.
 
 ---
 

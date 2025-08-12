@@ -4,6 +4,10 @@
 - Use `import "ContractName"` format only.
 - Include all required contract imports.
 
+## Transaction Order (readability)
+- Write blocks in this order: `prepare` → `pre` → `post` → `execute`.
+- Let reviewers grasp setup and guarantees before execution logic.
+
 ## Preconditions/Postconditions
 - Single boolean expression per pre/post block.
 - Use `assert()` for multi-step validation in execute.
@@ -11,17 +15,17 @@
 ## Capabilities & Addresses
 - Validate capabilities before use.
 - Pass addresses as parameters only when you must resolve third-party capabilities directly.
-- Prefer connector helpers (e.g., `borrowPool(poolID:)`) over manual address resolution.
+- Prefer connector helpers (e.g., `borrowPool(pid:)`) over manual address resolution.
 
 ## Resource Safety
 - Always ensure `vault.balance == 0.0` before `destroy`.
 - Use `withdrawAvailable` and `depositCapacity` (never raw deposit paths).
 
 ## Build the Chain (Restake)
-- Source: `PoolRewardsSource(userCertificate, pid, rewardTokenType, overflowSinks: {})`
+- Source: `PoolRewardsSource(userCertificate, pid)`
 - Swapper: `Zapper(token0Type: rewardTokenType, token1Type: pairTokenType, stableMode: false)`
-- Wrap: `SwapSource(swapper, source)`
-- Sink: `PoolSink(poolID: pid, staker: userAddress)`
+- Wrap: `SwapConnectors.SwapSource(swapper, source)`
+- Sink: `PoolSink(pid: pid, staker: userAddress)`
 
 ## Validate
 - `source.minimumAvailable() > 0.0`

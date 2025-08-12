@@ -1,11 +1,13 @@
 # Transaction Templates
 
+> Note: The canonical, end-to-end Restake transaction lives in `workflows/restaking-workflow.md`. This page focuses on reusable, generic templates; see the workflow doc for the complete flow and rationale.
+
 ## Basic Transfer Template
 
 ### Vault to Vault Transfer
 ```cadence
 import "FungibleToken"
-import "FungibleTokenStack"
+import "FungibleTokenConnectors"
 
 transaction(
     sourceStoragePath: StoragePath,
@@ -13,20 +15,20 @@ transaction(
     amount: UFix64,
     maxCapacity: UFix64
 ) {
-    let source: FungibleTokenStack.VaultSource
-    let sink: FungibleTokenStack.VaultSink
+    let source: FungibleTokenConnectors.VaultSource
+    let sink: FungibleTokenConnectors.VaultSink
 
     prepare(acct: auth(BorrowValue) &Account) {
         let sourceCap = acct.capabilities.storage
             .issue<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>(sourceStoragePath)
         
-        self.source = FungibleTokenStack.VaultSource(
+        self.source = FungibleTokenConnectors.VaultSource(
             min: 0.0,
             withdrawVault: sourceCap,
             uniqueID: nil
         )
 
-        self.sink = FungibleTokenStack.VaultSink(
+        self.sink = FungibleTokenConnectors.VaultSink(
             max: maxCapacity,
             depositVault: targetVaultCap,
             uniqueID: nil
@@ -34,7 +36,7 @@ transaction(
     }
 
     execute {
-        let vault <- self.source.withdrawAvailable(maxAmount: amount)
+        let vault <- self.source.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
             from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
         )
@@ -52,37 +54,37 @@ transaction(
 ### Stake Tokens
 ```cadence
 import "FungibleToken"
-import "FungibleTokenStack"
+import "FungibleTokenConnectors"
 import "IncrementFiStakingConnectors"
 
 transaction(
     sourceStoragePath: StoragePath,
     staker: Address,
-    poolID: UInt64,
+    pid: UInt64,
     amount: UFix64
 ) {
-    let source: FungibleTokenStack.VaultSource
+    let source: FungibleTokenConnectors.VaultSource
     let sink: IncrementFiStakingConnectors.PoolSink
 
     prepare(acct: auth(BorrowValue) &Account) {
         let sourceCap = acct.capabilities.storage
             .issue<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>(sourceStoragePath)
         
-        self.source = FungibleTokenStack.VaultSource(
+        self.source = FungibleTokenConnectors.VaultSource(
             min: 0.0,
             withdrawVault: sourceCap,
             uniqueID: nil
         )
 
         self.sink = IncrementFiStakingConnectors.PoolSink(
-            poolID: poolID,
+            pid: pid,
             staker: staker,
             uniqueID: nil
         )
     }
 
     execute {
-        let vault <- self.source.withdrawAvailable(maxAmount: amount)
+        let vault <- self.source.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
             from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
         )
@@ -92,25 +94,24 @@ transaction(
 
     pre {
         amount > 0.0: "Stake amount must be positive"
-        poolID > 0: "Pool ID must be valid"
+        pid > 0: "Pool ID must be valid"
     }
 }
 
 ### Claim Rewards
 ```cadence
 import "FungibleToken"
-import "FungibleTokenStack"
+import "FungibleTokenConnectors"
 import "IncrementFiStakingConnectors"
 import "Staking"
 
 transaction(
-    poolID: UInt64,
-    rewardTokenType: Type,
+    pid: UInt64,
     targetVaultCap: Capability<&{FungibleToken.Vault}>
 ) {
     let userCertificateCap: Capability<&Staking.UserCertificate>
     let rewardSource: IncrementFiStakingConnectors.PoolRewardsSource
-    let sink: FungibleTokenStack.VaultSink
+    let sink: FungibleTokenConnectors.VaultSink
 
     prepare(acct: auth(BorrowValue, SaveValue) &Account) {
         self.userCertificateCap = acct.capabilities.storage
@@ -118,13 +119,11 @@ transaction(
 
         self.rewardSource = IncrementFiStakingConnectors.PoolRewardsSource(
             userCertificate: self.userCertificateCap,
-            poolID: poolID,
-            vaultType: rewardTokenType,
-            overflowSinks: {},
+            pid: pid,
             uniqueID: nil
         )
 
-        self.sink = FungibleTokenStack.VaultSink(
+        self.sink = FungibleTokenConnectors.VaultSink(
             max: nil,
             depositVault: targetVaultCap,
             uniqueID: nil
@@ -146,8 +145,8 @@ transaction(
 ### Single Token Swap
 ```cadence
 import "FungibleToken"
-import "FungibleTokenStack"
-import "SwapStack"
+import "FungibleTokenConnectors"
+import "SwapConnectors"
 
 transaction(
     sourceStoragePath: StoragePath,
@@ -155,26 +154,26 @@ transaction(
     swapper: {DeFiActions.Swapper},
     amount: UFix64
 ) {
-    let swapSource: SwapStack.SwapSource
-    let sink: FungibleTokenStack.VaultSink
+    let swapSource: SwapConnectors.SwapSource
+    let sink: FungibleTokenConnectors.VaultSink
 
     prepare(acct: auth(BorrowValue) &Account) {
         let sourceCap = acct.capabilities.storage
             .issue<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>(sourceStoragePath)
         
-        let source = FungibleTokenStack.VaultSource(
+        let source = FungibleTokenConnectors.VaultSource(
             min: 0.0,
             withdrawVault: sourceCap,
             uniqueID: nil
         )
 
-        self.swapSource = SwapStack.SwapSource(
+        self.swapSource = SwapConnectors.SwapSource(
             swapper: swapper,
             source: source,
             uniqueID: nil
         )
 
-        self.sink = FungibleTokenStack.VaultSink(
+        self.sink = FungibleTokenConnectors.VaultSink(
             max: nil,
             depositVault: targetVaultCap,
             uniqueID: nil
@@ -182,7 +181,7 @@ transaction(
     }
 
     execute {
-        let vault <- self.swapSource.withdrawAvailable(maxAmount: amount)
+        let vault <- self.swapSource.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
             from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
         )
@@ -198,8 +197,8 @@ transaction(
 ### Zap to LP Tokens
 ```cadence
 import "FungibleToken"
-import "FungibleTokenStack"
-import "SwapStack"
+import "FungibleTokenConnectors"
+import "SwapConnectors"
 import "IncrementFiPoolLiquidityConnectors"
 
 transaction(
@@ -210,14 +209,14 @@ transaction(
     stableMode: Bool,
     amount: UFix64
 ) {
-    let swapSource: SwapStack.SwapSource
-    let sink: FungibleTokenStack.VaultSink
+    let swapSource: SwapConnectors.SwapSource
+    let sink: FungibleTokenConnectors.VaultSink
 
     prepare(acct: auth(BorrowValue) &Account) {
         let sourceCap = acct.capabilities.storage
             .issue<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>(sourceStoragePath)
         
-        let source = FungibleTokenStack.VaultSource(
+        let source = FungibleTokenConnectors.VaultSource(
             min: 0.0,
             withdrawVault: sourceCap,
             uniqueID: nil
@@ -230,13 +229,13 @@ transaction(
             uniqueID: nil
         )
 
-        self.swapSource = SwapStack.SwapSource(
+        self.swapSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: source,
             uniqueID: nil
         )
 
-        self.sink = FungibleTokenStack.VaultSink(
+        self.sink = FungibleTokenConnectors.VaultSink(
             max: nil,
             depositVault: targetVaultCap,
             uniqueID: nil
@@ -244,7 +243,7 @@ transaction(
     }
 
     execute {
-        let vault <- self.swapSource.withdrawAvailable(maxAmount: amount)
+        let vault <- self.swapSource.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
             from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
         )
@@ -302,7 +301,7 @@ transaction(
 ### Use AutoBalancer as Source
 ```cadence
 import "FungibleToken"
-import "FungibleTokenStack"
+import "FungibleTokenConnectors"
 import "DeFiActions"
 
 transaction(
@@ -312,7 +311,7 @@ transaction(
     amount: UFix64
 ) {
     let autoBalancerSource: DeFiActions.AutoBalancerSource
-    let sink: FungibleTokenStack.VaultSink
+    let sink: FungibleTokenConnectors.VaultSink
 
     prepare(acct: auth(BorrowValue) &Account) {
         let autoBalancerCap = getAccount(autoBalancerAddress).capabilities
@@ -324,7 +323,7 @@ transaction(
             uniqueID: nil
         )
 
-        self.sink = FungibleTokenStack.VaultSink(
+        self.sink = FungibleTokenConnectors.VaultSink(
             max: nil,
             depositVault: targetVaultCap,
             uniqueID: nil
@@ -332,7 +331,7 @@ transaction(
     }
 
     execute {
-        let vault <- self.autoBalancerSource.withdrawAvailable(maxAmount: amount)
+        let vault <- self.autoBalancerSource.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
             from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
         )
@@ -351,7 +350,7 @@ transaction(
 ```cadence
 import "FungibleToken"
 import "DeFiActions"
-import "SwapStack"
+import "SwapConnectors"
 import "IncrementFiStakingConnectors"
 import "IncrementFiPoolLiquidityConnectors"
 import "Staking"
@@ -372,7 +371,7 @@ transaction(
             .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
         
         // Borrow the pool and record starting stake
-        self.pool = IncrementFiStakingConnectors.borrowPool(poolID: pid)
+        self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
             ?? panic("Pool with ID \\(".concat(pid.toString()).concat(") not found or not accessible"))
         
         self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount 
@@ -383,9 +382,7 @@ transaction(
         // Rewards Source
         let poolRewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
             userCertificate: self.userCertificateCap,
-            poolID: pid,
-            vaultType: rewardTokenType,
-            overflowSinks: {},
+            pid: pid,
             uniqueID: nil
         )
         
@@ -398,7 +395,7 @@ transaction(
         )
         
         // Swap source combining rewards -> LP
-        let lpTokenPoolRewardsSource = SwapStack.SwapSource(
+        let lpTokenPoolRewardsSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: poolRewardsSource,
             uniqueID: nil
@@ -406,7 +403,7 @@ transaction(
         
         // Pool sink to restake LP tokens
         let poolSink = IncrementFiStakingConnectors.PoolSink(
-            poolID: pid,
+            pid: pid,
             staker: self.userCertificateCap.address,
             uniqueID: nil
         )
@@ -426,80 +423,11 @@ transaction(
     }
 }
 
-## Claim → Zap → Restake (Minimal Params)
-```cadence
-import "FungibleToken"
-import "Staking"
-import "IncrementFiStakingConnectors"
-import "IncrementFiPoolLiquidityConnectors"
-import "SwapStack"
-import "DeFiActions"
-import "SwapConfig"
+### Claim → Zap → Restake (Minimal Params)
 
-transaction(
-    pid: UInt64,
-    rewardTokenType: Type,         // Reward token (and one side of LP)
-    pairTokenType: Type,           // Other LP side (e.g., FLOW for FLOW-stFLOW)
-    minimumRestakedAmount: UFix64  // Absolute minimum stake delta required
-) {
-    let userCertificateCap: Capability<&Staking.UserCertificate>
-    let pool: &{Staking.PoolPublic}
-    let startingStake: UFix64
-
-    prepare(acct: auth(BorrowValue, SaveValue) &Account) {
-        self.pool = IncrementFiStakingConnectors.borrowPool(poolID: pid)
-            ?? panic("Pool with ID \(pid) not found or not accessible")
-        
-        self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
-            ?? panic("No user info found for address \(acct.address)")
-
-        self.userCertificateCap = acct.capabilities.storage
-            .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
-    }
-
-    execute {
-        // Rewards source
-        let rewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
-            userCertificate: self.userCertificateCap,
-            poolID: pid,
-            vaultType: rewardTokenType,
-            overflowSinks: {},
-            uniqueID: nil
-        )
-
-        // Zapper to LP
-        let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
-            token0Type: rewardTokenType,
-            token1Type: pairTokenType,
-            stableMode: false,
-            uniqueID: nil
-        )
-
-        // Compose via SwapSource
-        let lpRewardsSource = SwapStack.SwapSource(
-            swapper: zapper,
-            source: rewardsSource,
-            uniqueID: nil
-        )
-
-        // Stake into same pool
-        let sink = IncrementFiStakingConnectors.PoolSink(
-            poolID: pid,
-            staker: self.userCertificateCap.address,
-            uniqueID: nil
-        )
-
-        let vault <- lpRewardsSource.withdrawAvailable(maxAmount: sink.minimumCapacity())
-        sink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
-        assert(vault.balance == 0.0, message: "Vault should be empty after restake")
-        destroy vault
-    }
-
-    post {
-        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount >= self.startingStake + minimumRestakedAmount:
-            "Restaking failed: restaked amount below minimumRestakedAmount"
-    }
-}
+This variant duplicates the complete workflow above. To avoid redundancy, see:
+- Canonical workflow: `workflows/restaking-workflow.md`
+- Quick template: the "Complete Restaking Workflow" section immediately above
 
 ## Template Usage Guidelines
 

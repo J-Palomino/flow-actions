@@ -12,7 +12,7 @@ import "FungibleToken"
 import "Staking"
 import "IncrementFiStakingConnectors"
 import "IncrementFiPoolLiquidityConnectors"
-import "SwapStack"
+import "SwapConnectors"
 import "DeFiActions"
 import "SwapConfig"
 ```
@@ -42,7 +42,7 @@ transaction(
     let startingStake: UFix64
 
     prepare(acct: auth(BorrowValue, SaveValue) &Account) {
-        self.pool = IncrementFiStakingConnectors.borrowPool(poolID: pid)
+        self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
             ?? panic("Pool with ID \(pid) not found or not accessible")
 
         self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
@@ -54,9 +54,7 @@ transaction(
     execute {
         let poolRewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
             userCertificate: self.userCertificateCap,
-            poolID: pid,
-            vaultType: rewardTokenType,
-            overflowSinks: {},
+            pid: pid,
             uniqueID: nil
         )
 
@@ -67,14 +65,14 @@ transaction(
             uniqueID: nil
         )
 
-        let lpTokenPoolRewardsSource = SwapStack.SwapSource(
+        let lpTokenPoolRewardsSource = SwapConnectors.SwapSource(
             swapper: zapper,
             source: poolRewardsSource,
             uniqueID: nil
         )
 
         let poolSink = IncrementFiStakingConnectors.PoolSink(
-            poolID: pid,
+            pid: pid,
             staker: self.userCertificateCap.address,
             uniqueID: nil
         )
