@@ -19,6 +19,7 @@ These rules guide AI agents to generate correct, safe Cadence transactions using
 - Derive token types and mode from the staking pool pair; do not add parameters:
   - Use `IncrementFiStakingConnectors.borrowPairPublicByPid(pid)` and `tokenTypeIdentifierToVaultType`.
   - Use `pair.getPairInfoStruct().isStableswap` for `stableMode`.
+- For direct pool prompts (e.g., “restake for pool #198”), you may hardcode `let PID: UInt64 = 198` in the transaction and use it consistently for auditability.
 
 ## Imports
 Always use string imports:
@@ -32,7 +33,7 @@ import "Staking"
 ```
 
 ## Transaction Block Order
-- Write in this physical order for readability: `prepare` → `pre` → `post` → `execute`.
+- **CRITICAL**: Write in this physical order for readability: `prepare` → `pre` → `post` → `execute`. Never use `prepare` → `execute` → `post`.
 - Readers can audit inputs and guarantees before scanning execution logic.
 
 ## Required Params (Restake)
@@ -88,9 +89,10 @@ import "Staking"
 ## Code Style
 - Use named arguments.
 - Keep variable names descriptive: `poolRewardsSource`, `zapper`, `lpTokenPoolRewardsSource`, `poolSink`.
+- **Prefer explicit instantiation over nested construction**: Create each connector separately with descriptive names and comments rather than nesting constructors.
 - Prefer early returns and minimal nesting inside connector implementations (transactions use assertions instead).
 - Write for humans first: add brief comments at the start of each block (`prepare`, `pre`, `post`, `execute`) and before key steps (connector construction, withdraw/deposit, assertions) to explain intent and safety.
-- Keep comments focused on “why” and safety context (not restating code mechanics).
+- Keep comments focused on "why" and safety context (not restating code mechanics).
 
 ## Sanity Checklist
 - Imports present and string-based.

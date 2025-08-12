@@ -37,6 +37,10 @@ transaction(
         )
     }
 
+    pre {
+        amount > 0.0: "Amount must be positive"
+    }
+
     execute {
         let vault <- self.source.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
@@ -44,10 +48,6 @@ transaction(
         )
         assert(vault.balance == 0.0, message: "Transfer incomplete")
         destroy vault
-    }
-
-    pre {
-        amount > 0.0: "Amount must be positive"
     }
 }
 
@@ -85,6 +85,11 @@ transaction(
         )
     }
 
+    pre {
+        amount > 0.0: "Stake amount must be positive"
+        pid > 0: "Pool ID must be valid"
+    }
+
     execute {
         let vault <- self.source.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
@@ -92,11 +97,6 @@ transaction(
         )
         assert(vault.balance == 0.0, message: "Staking incomplete")
         destroy vault
-    }
-
-    pre {
-        amount > 0.0: "Stake amount must be positive"
-        pid > 0: "Pool ID must be valid"
     }
 }
 
@@ -182,6 +182,10 @@ transaction(
         )
     }
 
+    pre {
+        amount > 0.0: "Swap amount must be positive"
+    }
+
     execute {
         let vault <- self.swapSource.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
@@ -189,10 +193,6 @@ transaction(
         )
         assert(vault.balance == 0.0, message: "Swap incomplete")
         destroy vault
-    }
-
-    pre {
-        amount > 0.0: "Swap amount must be positive"
     }
 }
 
@@ -244,6 +244,10 @@ transaction(
         )
     }
 
+    pre {
+        amount > 0.0: "Zap amount must be positive"
+    }
+
     execute {
         let vault <- self.swapSource.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
@@ -251,10 +255,6 @@ transaction(
         )
         assert(vault.balance == 0.0, message: "Zap incomplete")
         destroy vault
-    }
-
-    pre {
-        amount > 0.0: "Zap amount must be positive"
     }
 }
 
@@ -332,6 +332,10 @@ transaction(
         )
     }
 
+    pre {
+        amount > 0.0: "Amount must be positive"
+    }
+
     execute {
         let vault <- self.autoBalancerSource.withdrawAvailable(maxAmount: self.sink.minimumCapacity())
         self.sink.depositCapacity(
@@ -339,10 +343,6 @@ transaction(
         )
         assert(vault.balance == 0.0, message: "AutoBalancer withdrawal incomplete")
         destroy vault
-    }
-
-    pre {
-        amount > 0.0: "Amount must be positive"
     }
 }
 
@@ -406,6 +406,12 @@ transaction(
         ).outAmount
     }
     
+    post {
+        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount 
+            >= self.startingStake + self.expectedStakeIncrease:
+            "Restaking failed: restaked amount is below the expected amount"
+    }
+    
     execute {
         let poolSink = IncrementFiStakingConnectors.PoolSink(
             pid: pid,
@@ -419,12 +425,6 @@ transaction(
         assert(vault.balance == 0.0, message: "Vault should be empty after withdrawal - restaking may have failed")
         destroy vault
     }
-    
-    post {
-        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount 
-            >= self.startingStake + self.expectedStakeIncrease:
-            "Restaking failed: restaked amount is below the expected amount"
-    }
 }
 
 ### Claim → Zap → Restake (Minimal Params)
@@ -433,6 +433,11 @@ This variant duplicates the complete workflow above. To avoid redundancy, see:
 - Canonical workflow: [workflows/restaking-workflow.md](./workflows/restaking-workflow.md)
 
 ## Template Usage Guidelines
+
+### Connector Instantiation Style
+- **Always use explicit instantiation**: Create each connector separately with descriptive variable names and comments.
+- **Avoid nested construction**: This makes debugging difficult and reduces readability.
+- **Add comments**: Explain the purpose of each connector and how it fits in the chain.
 
 ### Parameter Naming Convention
 - Use descriptive parameter names

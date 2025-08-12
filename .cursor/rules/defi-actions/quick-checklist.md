@@ -5,7 +5,7 @@
 - Include all required contract imports.
 
 ## Transaction Order (readability)
-- Write blocks in this order: `prepare` → `pre` → `post` → `execute`.
+- **CRITICAL**: Write blocks in this order: `prepare` → `pre` → `post` → `execute`. Never use `prepare` → `execute` → `post`.
 - Let reviewers grasp setup and guarantees before execution logic.
 
 ## Preconditions/Postconditions
@@ -22,6 +22,7 @@
 - Use `withdrawAvailable` and `depositCapacity` (never raw deposit paths).
 
 ## Build the Chain (Restake)
+- **Instantiate explicitly**: Create each connector separately with descriptive names and comments.
 - Source: `PoolRewardsSource(userCertificate, pid)`
 - Swapper: `Zapper(token0Type: derived token0 from pair, token1Type: derived token1 from pair, stableMode: pair.isStableswap)`
 - Wrap: `SwapConnectors.SwapSource(swapper, source)`

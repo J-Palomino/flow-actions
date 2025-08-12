@@ -11,9 +11,9 @@
 // - depositCapacity enforces type equality with a precondition
 // - Withdrawals are sized by callers via minimumCapacity() or DeFiActions patterns
 import "FungibleToken"
-import DeFiActions from "../../imports/92195d814edf9cb0/DeFiActions.cdc"
+import "DeFiActions"
 
-access(all) contract MyConnector {
+access(all) contract ExampleConnector {
     // TokenSink: A simple Sink that deposits everything it receives
     access(all) struct TokenSink: DeFiActions.Sink {
         // Capability to a receiver that can accept withdrawals of the matching vault type
@@ -22,10 +22,11 @@ access(all) contract MyConnector {
         access(contract) var uniqueID: DeFiActions.UniqueIdentifier?
 
         init(
-            vault: Capability<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>
+            vault: Capability<auth(FungibleToken.Withdraw) &{FungibleToken.Vault}>,
+            uniqueID: DeFiActions.UniqueIdentifier?
         ) {
             self.vault = vault
-            self.uniqueID = nil
+            self.uniqueID = uniqueID
         }
 
         // Required by Sink: advertise the exact deposit type supported

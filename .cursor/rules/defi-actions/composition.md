@@ -55,15 +55,28 @@ swapSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{Fungible
 
 ## Multi-Level Composition
 
-### Nested SwapSource
+### Explicit SwapSource Chaining (Preferred)
 ```cadence
+// Step 1: Create base vault source
+let baseSource = FungibleTokenConnectors.VaultSource(...)
+
+// Step 2: Create first swapper for initial conversion  
+let firstSwapper = SomeSwapper(...)
+
+// Step 3: Create first swap source (base → intermediate)
+let firstSwapSource = SwapConnectors.SwapSource(
+    swapper: firstSwapper,
+    source: baseSource,
+    uniqueID: operationID
+)
+
+// Step 4: Create second swapper for final conversion
+let secondSwapper = AnotherSwapper(...)
+
+// Step 5: Create final swap source (intermediate → final)
 let complexSource = SwapConnectors.SwapSource(
-    swapper: secondSwapper,                    // Final conversion
-    source: SwapConnectors.SwapSource(         // Nested SwapSource
-        swapper: firstSwapper,                 // Initial conversion
-        source: FungibleTokenConnectors.VaultSource(...),  // Base source
-        uniqueID: operationID
-    ),
+    swapper: secondSwapper,
+    source: firstSwapSource,
     uniqueID: operationID
 )
 ```
@@ -133,24 +146,66 @@ autoBalancerSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{
 
 ### AutoBalancer in Chain
 ```cadence
-// Complex chain with AutoBalancer
-let rewardSource = PoolRewardsSource(...)
-let swapSource = SwapConnectors.SwapSource(swapper: zapper, source: rewardSource, uniqueID: nil)
-let autoBalancerSink = DeFiActions.AutoBalancerSink(autoBalancer: balancerCap, uniqueID: nil)
+// Create each component explicitly for readability and debugging
+let rewardSource = PoolRewardsSource(
+    userCertificate: userCertificateCap,
+    pid: pid,
+    uniqueID: operationID
+)
 
+let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
+    token0Type: token0Type,
+    token1Type: token1Type,
+    stableMode: stableMode,
+    uniqueID: operationID
+)
+
+let swapSource = SwapConnectors.SwapSource(
+    swapper: zapper,
+    source: rewardSource,
+    uniqueID: operationID
+)
+
+let autoBalancerSink = DeFiActions.AutoBalancerSink(
+    autoBalancer: balancerCap,
+    uniqueID: operationID
+)
+
+// Execute the chain
 let vault <- swapSource.withdrawAvailable(maxAmount: autoBalancerSink.minimumCapacity())
 autoBalancerSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
 ```
 
 ## Composition Best Practices
 
-### Keep Chains Simple
+### Prefer Explicit Instantiation Over Nesting
 ```cadence
-// ✅ Good: Clear, debuggable chain
-VaultSource -> SwapSource(Zapper) -> PoolSink
+// ✅ PREFERRED: Explicit instantiation - readable, debuggable, commentable
+let rewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
+    userCertificate: userCertificateCap,
+    pid: pid,
+    uniqueID: operationID
+)
 
-// ❌ Too complex: Hard to debug
-VaultSource -> SwapSource(SwapSink(SwapSource(...))) -> ComplexSink
+let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
+    token0Type: token0Type,
+    token1Type: token1Type,
+    stableMode: stableMode,
+    uniqueID: operationID
+)
+
+let swapSource = SwapConnectors.SwapSource(
+    swapper: zapper,
+    source: rewardsSource,
+    uniqueID: operationID
+)
+
+// ❌ AVOID: Nested construction - hard to read, debug, and comment
+let swapSource = SwapConnectors.SwapSource(
+    swapper: IncrementFiPoolLiquidityConnectors.Zapper(...),
+    source: IncrementFiStakingConnectors.PoolRewardsSource(...),
+    uniqueID: operationID
+)
 ```
 
 ### Use Consistent UniqueIDs

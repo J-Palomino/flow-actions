@@ -5,6 +5,8 @@ import "IncrementFiStakingConnectors"
 import "IncrementFiPoolLiquidityConnectors"
 import "Staking"
 
+/// Claims farm rewards from IncrementFi and restakes them into the same pool
+/// This transaction follows the Claim → Zap → Stake workflow pattern
 transaction(
     pid: UInt64
 ) {
@@ -16,70 +18,79 @@ transaction(
     let operationID: DeFiActions.UniqueIdentifier
 
     prepare(acct: auth(BorrowValue, SaveValue, IssueStorageCapabilityController) &Account) {
-        // Borrow pool and snapshot user's current stake
+        // Get pool reference and validate it exists
         self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
             ?? panic("Pool with ID \(pid) not found or not accessible")
+        
+        // Get starting stake amount for post-condition validation
         self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
             ?? panic("No user info for address \(acct.address)")
-
-        // Issue user certificate capability (required by staking connectors)
+        
+        // Issue capability for user certificate
         self.userCertificateCap = acct.capabilities.storage
             .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
 
-        // Create a unique identifier for tracing this composed operation
+        // Create unique identifier for tracing this composed operation
         self.operationID = DeFiActions.createUniqueIdentifier()
 
-        // Derive pair metadata to construct the zapper safely
+        // Get pair info to determine token types and stable mode
         let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
             ?? panic("Pair with ID \(pid) not found or not accessible")
 
+        // Create zapper to convert rewards to LP tokens
         let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
             token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
             token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
             stableMode: pair.getPairInfoStruct().isStableswap,
             uniqueID: self.operationID
         )
-
+        
+        // Create rewards source to claim staking rewards
+        let rewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
+            userCertificate: self.userCertificateCap,
+            pid: pid,
+            uniqueID: self.operationID
+        )
+        
+        // Wrap rewards source with zapper to convert rewards to LP tokens
         let lpSource = SwapConnectors.SwapSource(
             swapper: zapper,
-            source: IncrementFiStakingConnectors.PoolRewardsSource(
-                userCertificate: self.userCertificateCap,
-                pid: pid,
-                uniqueID: self.operationID
-            ),
+            source: rewardsSource,
             uniqueID: self.operationID
         )
 
         self.swapSource = lpSource
-
-        // Quote expected LP stake increase for post-condition
+        
+        // Calculate expected stake increase for post-condition
         self.expectedStakeIncrease = zapper.quoteOut(
             forProvided: lpSource.minimumAvailable(),
             reverse: false
         ).outAmount
     }
 
+    post {
+        // Verify that staking amount increased by at least the expected amount
+        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount
+            >= self.startingStake + self.expectedStakeIncrease:
+            "Restake below expected amount"
+    }
+
     execute {
-        // Stake LP by sizing withdraw to sink capacity
+        // Create pool sink to receive LP tokens for staking
         let poolSink = IncrementFiStakingConnectors.PoolSink(
             pid: pid,
             staker: self.userCertificateCap.address,
             uniqueID: self.operationID
         )
 
-        let vault <- self.swapSource.withdrawAvailable(
-            maxAmount: poolSink.minimumCapacity()
-        )
-        poolSink.depositCapacity(
-            from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault}
-        )
+        // Withdraw LP tokens from swap source (sized by sink capacity)
+        let vault <- self.swapSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
+        
+        // Deposit LP tokens into pool for staking
+        poolSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
+        
+        // Ensure no residual tokens remain
         assert(vault.balance == 0.0, message: "Residual after deposit")
         destroy vault
-    }
-
-    post {
-        // Ensure stake increased by at least the quoted amount
-        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount
-            >= self.startingStake + self.expectedStakeIncrease
     }
 } 

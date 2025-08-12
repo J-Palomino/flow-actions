@@ -162,7 +162,12 @@ Source -> SwapSink(swapper, sink)
 
 ### Multi-Level Composition
 ```
-SwapSource(swapper2, SwapSource(swapper1, source)) -> Sink
+// Explicit instantiation (preferred):
+let baseSource = VaultSource(...)
+let firstSwapSource = SwapSource(swapper1, baseSource)  
+let finalSwapSource = SwapSource(swapper2, firstSwapSource)
+
+// Chain: baseSource → swapper1 → swapper2 → sink
 ```
 
 ### AutoBalancer Integration

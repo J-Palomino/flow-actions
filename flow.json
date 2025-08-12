@@ -1,7 +1,7 @@
 {
 	"contracts": {
-		"Counter": {
-			"source": "cadence/contracts/Counter.cdc",
+		"ExampleConnector": {
+			"source": "cadence/contracts/ExampleConnector.cdc",
 			"aliases": {
 				"testing": "0000000000000007"
 			}

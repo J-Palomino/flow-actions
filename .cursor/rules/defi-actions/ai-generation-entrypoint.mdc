@@ -2,7 +2,6 @@
 alwaysApply: true
 ---
 
-
 # DeFiActions Agent Rules (Cursor)
 
 > ENTRYPOINT: This is the single, canonical starting point for AI agents. Use these rules to generate transactions. Deep-dive references are linked below when you need more context.
@@ -40,6 +39,11 @@ import "Staking"
 ## Parameter mapping from prompts
 - **pool id** → `pid: UInt64`
 - Token types and `stableMode` are derived from the pool pair; do not add extra params.
+- For single-pool requests (“restake rewards for pool #198”), prefer a hardcoded `pid` constant in the transaction for auditability:
+```cadence
+let PID: UInt64 = 198
+// use PID in place of pid parameter everywhere below
+```
 
 ## Minimal Restake Workflow (Claim → Zap → Stake)
 ```cadence
@@ -72,13 +76,18 @@ transaction(
             stableMode: pair.getPairInfoStruct().isStableswap,
             uniqueID: operationID
         )
+        
+        // Create rewards source to claim staking rewards
+        let rewardsSource = IncrementFiStakingConnectors.PoolRewardsSource(
+            userCertificate: self.userCertificateCap,
+            pid: pid,
+            uniqueID: operationID
+        )
+        
+        // Wrap rewards source with zapper to convert rewards to LP tokens
         let lpSource = SwapConnectors.SwapSource(
             swapper: zapper,
-            source: IncrementFiStakingConnectors.PoolRewardsSource(
-                userCertificate: self.userCertificateCap,
-                pid: pid,
-                uniqueID: operationID
-            ),
+            source: rewardsSource,
             uniqueID: operationID
         )
 
@@ -87,6 +96,12 @@ transaction(
             forProvided: lpSource.minimumAvailable(),
             reverse: false
         ).outAmount
+    }
+
+    post {
+        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount
+            >= self.startingStake + self.expectedStakeIncrease:
+            "Restake below expected amount"
     }
 
     execute {
@@ -101,18 +116,12 @@ transaction(
         assert(vault.balance == 0.0, message: "Residual after deposit")
         destroy vault
     }
-
-    post {
-        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount
-            >= self.startingStake + self.expectedStakeIncrease:
-            "Restake below expected amount"
-    }
 }
 ```
 
 ## Safety invariants (do not relax)
-- Order blocks: `prepare` → `pre` → `post` → `execute` for reviewability.
-- Size withdraws by the target sink’s capacity when immediately depositing: `withdrawAvailable(maxAmount: sink.minimumCapacity())`.
+- **CRITICAL**: Order blocks: `prepare` → `pre` → `post` → `execute` for reviewability. Never use `prepare` → `execute` → `post`.
+- Size withdraws by the target sink's capacity when immediately depositing: `withdrawAvailable(maxAmount: sink.minimumCapacity())`.
 - Pre/Post blocks contain exactly one boolean expression.
 - Always assert residuals: `vault.balance == 0.0` before `destroy`.
 - Use `source.minimumAvailable()` and `sink.minimumCapacity()` instead of manual math.
@@ -122,132 +131,7 @@ transaction(
 
 ## Style & naming
 - Use named args and descriptive identifiers: `poolRewardsSource`, `zapper`, `lpSource`, `poolSink`.
-- Keep parameters minimal; avoid protocol addresses unless strictly needed.
-- Use string imports exactly as shown.
-- Comment for humans: add short block headers (`prepare`, `pre`, `post`, `execute`) and one-line intent/safety comments for key steps (connector construction, withdraw/deposit, assertions).
-
----
-Deep-dive references: [ai-generation-guide.md](./ai-generation-guide.md) • [quick-checklist.md](./quick-checklist.md) • [connectors.md](./connectors.md)
-
-# DeFiActions Agent Rules (Cursor)
-
-> ENTRYPOINT: This is the single, canonical starting point for AI agents. Use these rules to generate transactions. Deep-dive references are linked below when you need more context.
-
-Start here — Happy Path (Restake): [workflows/restaking-workflow.md](./workflows/restaking-workflow.md)
-
-Purpose: Help an AI compose safe, correct Cadence transactions using DeFiActions connectors. Keep generations minimal, typed, and verifiable.
-
-## Imports (always string-based)
-```cadence
-import "FungibleToken"
-import "DeFiActions"
-import "SwapConnectors"
-import "IncrementFiStakingConnectors"
-import "IncrementFiPoolLiquidityConnectors"
-import "Staking"
-```
-
-## Core Concepts (1-liners)
-- **Source**: Provides up to `minimumAvailable()` of a vault type via `withdrawAvailable(maxAmount:)`.
-- **Sink**: Accepts up to `minimumCapacity()` of a vault type via `depositCapacity(from:)`.
-- **Swapper**: Converts tokens; `inType()`, `outType()`, `quoteIn/quoteOut`, `swap`, `swapBack`.
-- **SwapSource**: `SwapConnectors.SwapSource(swapper, source)` → behaves like a Source of the swapper’s outType.
-- **UniqueIdentifier**: Optional ID for tracing stack operations; not required for basic flows.
-- See inherited members you must implement when creating connectors: [interface-inheritance.md](./interface-inheritance.md)
-
-## Connector APIs you will use
-- `IncrementFiStakingConnectors.PoolRewardsSource(userCertificate: Capability<&Staking.UserCertificate>, pid: UInt64, uniqueID: DeFiActions.UniqueIdentifier?)`
-- `IncrementFiStakingConnectors.PoolSink(pid: UInt64, staker: Address, uniqueID: DeFiActions.UniqueIdentifier?)`
-- `IncrementFiPoolLiquidityConnectors.Zapper(token0Type: Type, token1Type: Type, stableMode: Bool, uniqueID: DeFiActions.UniqueIdentifier?)`
-- `SwapConnectors.SwapSource(swapper: {DeFiActions.Swapper}, source: {DeFiActions.Source}, uniqueID: DeFiActions.UniqueIdentifier?)`
-- Helper: `IncrementFiStakingConnectors.borrowPool(pid: UInt64): &{Staking.PoolPublic}?`
-- Helper: `IncrementFiStakingConnectors.borrowPairPublicByPid(pid: UInt64)` and `tokenTypeIdentifierToVaultType(_:)`
-
-## Parameter mapping from prompts
-- **pool id** → `pid: UInt64`
-- Token types and `stableMode` are derived from the pool pair; do not add extra params.
-
-## Minimal Restake Workflow (Claim → Zap → Stake)
-```cadence
-transaction(
-    pid: UInt64
-) {
-    let userCertificateCap: Capability<&Staking.UserCertificate>
-    let pool: &{Staking.PoolPublic}
-    let startingStake: UFix64
-    let swapSource: SwapConnectors.SwapSource
-    let expectedStakeIncrease: UFix64
-
-    prepare(acct: auth(BorrowValue, SaveValue, IssueStorageCapabilityController) &Account) {
-        self.pool = IncrementFiStakingConnectors.borrowPool(pid: pid)
-            ?? panic("Pool with ID \(pid) not found or not accessible")
-        self.startingStake = self.pool.getUserInfo(address: acct.address)?.stakingAmount
-            ?? panic("No user info for address \(acct.address)")
-        self.userCertificateCap = acct.capabilities.storage
-            .issue<&Staking.UserCertificate>(Staking.UserCertificateStoragePath)
-
-        // Create a unique identifier for tracing this composed operation
-        let operationID = DeFiActions.createUniqueIdentifier()
-
-        let pair = IncrementFiStakingConnectors.borrowPairPublicByPid(pid: pid)
-            ?? panic("Pair with ID \(pid) not found or not accessible")
-
-        let zapper = IncrementFiPoolLiquidityConnectors.Zapper(
-            token0Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token0Key),
-            token1Type: IncrementFiStakingConnectors.tokenTypeIdentifierToVaultType(pair.getPairInfoStruct().token1Key),
-            stableMode: pair.getPairInfoStruct().isStableswap,
-            uniqueID: operationID
-        )
-        let lpSource = SwapConnectors.SwapSource(
-            swapper: zapper,
-            source: IncrementFiStakingConnectors.PoolRewardsSource(
-                userCertificate: self.userCertificateCap,
-                pid: pid,
-                uniqueID: operationID
-            ),
-            uniqueID: operationID
-        )
-
-        self.swapSource = lpSource
-        self.expectedStakeIncrease = zapper.quoteOut(
-            forProvided: lpSource.minimumAvailable(),
-            reverse: false
-        ).outAmount
-    }
-
-    execute {
-        let poolSink = IncrementFiStakingConnectors.PoolSink(
-            pid: pid,
-            staker: self.userCertificateCap.address,
-            uniqueID: operationID
-        )
-
-        let vault <- self.swapSource.withdrawAvailable(maxAmount: poolSink.minimumCapacity())
-        poolSink.depositCapacity(from: &vault as auth(FungibleToken.Withdraw) &{FungibleToken.Vault})
-        assert(vault.balance == 0.0, message: "Residual after deposit")
-        destroy vault
-    }
-
-    post {
-        self.pool.getUserInfo(address: self.userCertificateCap.address)!.stakingAmount
-            >= self.startingStake + self.expectedStakeIncrease:
-            "Restake below expected amount"
-    }
-}
-```
-
-## Safety invariants (do not relax)
-- Order blocks: `prepare` → `pre` → `post` → `execute` for reviewability.
-- Size withdraws by the target sink’s capacity when immediately depositing: `withdrawAvailable(maxAmount: sink.minimumCapacity())`.
-- Pre/Post blocks contain exactly one boolean expression.
-- Always assert residuals: `vault.balance == 0.0` before `destroy`.
-- Use `source.minimumAvailable()` and `sink.minimumCapacity()` instead of manual math.
-- Prefer protocol helpers (e.g., `borrowPool(pid:)`) over raw address params.
-- Match types: `source.getSourceType() == swapper.inType()`, `swapper.outType() == sink.getSinkType()`; rely on constructor preconditions.
-- Use a single `uniqueID` across `PoolRewardsSource`, `Zapper`, `SwapSource`, and `PoolSink`.
-
-## Style & naming
-- Use named args and descriptive identifiers: `poolRewardsSource`, `zapper`, `lpSource`, `poolSink`.
+- **Instantiate components explicitly**: Create each connector separately with descriptive names rather than nesting constructors.
 - Keep parameters minimal; avoid protocol addresses unless strictly needed.
 - Use string imports exactly as shown.
 - Comment for humans: add short block headers (`prepare`, `pre`, `post`, `execute`) and one-line intent/safety comments for key steps (connector construction, withdraw/deposit, assertions).
