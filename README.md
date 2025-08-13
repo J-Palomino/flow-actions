@@ -13,9 +13,11 @@ References:
 
 ## 🚀 Quick Start: Mainnet
 
-- **Warning**: Transactions on mainnet incur fees and affect on-chain balances. Proceed carefully.
-- **1) Install deps**:
+- **Warning**: Transactions on mainnet incur fees and affect on-chain balances. Proceed carefully. For safety, consider creating a new Flow Wallet account with limited funds when exporting a private key.
+- **1) Clone and install deps**:
   ```bash
+  git clone <REPO_URL>
+  cd defiactions-scaffold
   flow deps install
   ```
 - **2) Create or configure your signer**:
@@ -26,9 +28,10 @@ References:
     ```
     Docs: [Flow CLI Accounts](https://developers.flow.com/tools/flow-cli/accounts)
   - Then add the signer to `flow.json` with your address and key file (or configure env-based signing). Ensure the account has sufficient FLOW for fees and storage.
-- **3) Create certificate (if needed)**: Initialize your `Staking.UserCertificate` using the Flow Script Runner (Mainnet): https://run.dnz.dev/snippet/d1bf715483551879
-- **4) Find your pool id**: Open the IncrementFi Farms page: https://app.increment.fi/farm and use the number in the pool name (e.g., `#198`). That number is your `pid`.
-- **5) Send the transaction on mainnet** (replace `<POOL_PID>` and signer):
+- **3) Stake 5 FLOW on IncrementFi**: Go to `https://app.increment.fi` and stake 5 FLOW so you have an active position.
+- **4) Create your staking certificate (if needed)**: Initialize `Staking.UserCertificate` using the Flow Script Runner (Mainnet): https://run.dnz.dev/snippet/d1bf715483551879
+- **5) Find your pool id**: Open the IncrementFi Farms page: https://app.increment.fi/farm and use the number in the pool name (e.g., `#198`). That number is your `pid`.
+- **6) Send the transaction on mainnet** (replace `<POOL_PID>` and signer):
   ```bash
   flow transactions send cadence/transactions/increment_fi_restake.cdc \
     --network mainnet \
