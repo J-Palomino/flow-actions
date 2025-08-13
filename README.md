@@ -11,6 +11,31 @@ References:
 - FLIP-338: Flow Actions – composable standards for protocols ([FLIP PR #339](https://github.com/onflow/flips/pull/339))
 - DeFiActions repo: [onflow/DeFiActions](https://github.com/onflow/DeFiActions)
 
+## 🚀 Quick Start: Mainnet
+
+- **Warning**: Transactions on mainnet incur fees and affect on-chain balances. Proceed carefully.
+- **1) Install deps**:
+  ```bash
+  flow deps install
+  ```
+- **2) Create or configure your signer**:
+  - Use an existing account: export your private key from the Flow Wallet Extension and configure it as your signer. Docs: [Flow Wallet Extension — Export private key](https://docs.wallet.flow.com/tutorial/extension-private-key-and-seed-phrase-guide)
+  - Or create a new mainnet account:
+    ```bash
+    flow accounts create --network mainnet
+    ```
+    Docs: [Flow CLI Accounts](https://developers.flow.com/tools/flow-cli/accounts)
+  - Then add the signer to `flow.json` with your address and key file (or configure env-based signing). Ensure the account has sufficient FLOW for fees and storage.
+- **3) Create certificate (if needed)**: Initialize your `Staking.UserCertificate` using the Flow Script Runner (Mainnet): https://run.dnz.dev/snippet/d1bf715483551879
+- **4) Find your pool id**: Open the IncrementFi Farms page: https://app.increment.fi/farm and use the number in the pool name (e.g., `#198`). That number is your `pid`.
+- **5) Send the transaction on mainnet** (replace `<POOL_PID>` and signer):
+  ```bash
+  flow transactions send cadence/transactions/increment_fi_restake.cdc \
+    --network mainnet \
+    --signer mainnet-account \
+    --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
+  ```
+
 ## 🔨 Prerequisites
 
 - Flow CLI: install from the [Flow CLI docs](https://developers.flow.com/tools/flow-cli/install)
@@ -169,9 +194,15 @@ Protocol requirement:
 - Ensure the signer has `Staking.UserCertificate` at `Staking.UserCertificateStoragePath`. If already staking in the target IncrementFi pool, you likely have one; otherwise follow the IncrementFi staking docs to initialize it.
 - Quick link (Mainnet): Create your `Staking.UserCertificate` using this Flow Script Runner: https://run.dnz.dev/snippet/d1bf715483551879
 
+### 🔎 Find your Pool ID (Mainnet)
+- Go to the IncrementFi Farms page: https://app.increment.fi/farm
+- Locate your pool and read the number in the pool name (formatted like `#198`). That number is the `pid` used by scripts and transactions.
+
+![Find Pool ID](docs/assets/find_pool_id.png)
+
 ## ▶️ Run the IncrementFi Restake Transaction
 
-Transaction: `cadence/transactions/IncrementFi_Restake.cdc`
+Transaction: `cadence/transactions/increment_fi_restake.cdc`
 
 Purpose:
 - Claim pending farm rewards → Zap to LP → Stake LP back to the same pool
@@ -179,28 +210,28 @@ Purpose:
 Parameters:
 - `pid: UInt64` – IncrementFi pool ID
 
-Emulator example (after deploy):
-```bash
-flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
-  --network emulator \
-  --signer emulator-account \
-  --args-json '[{"type":"UInt64","value":"1"}]'
-```
-
-Testnet example (replace `testnet-account` with your signer alias):
-```bash
-flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
-  --network testnet \
-  --signer testnet-account \
-  --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
-```
-
 Mainnet example (replace `mainnet-account` with your signer alias):
 ```bash
 flow transactions send cadence/transactions/IncrementFi_Restake.cdc \
   --network mainnet \
   --signer mainnet-account \
   --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
+```
+
+Testnet example (replace `testnet-account` with your signer alias):
+```bash
+flow transactions send cadence/transactions/increment_fi_restake.cdc \
+  --network testnet \
+  --signer testnet-account \
+  --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
+```
+
+Emulator example (after deploy):
+```bash
+flow transactions send cadence/transactions/increment_fi_restake.cdc \
+  --network emulator \
+  --signer emulator-account \
+  --args-json '[{"type":"UInt64","value":"0"}]'
 ```
 
 Requirements:
@@ -211,7 +242,7 @@ Requirements:
 
 ## 🧭 DeFiActions Composition (quick reference)
 
-Minimal restake flow connectors used in `cadence/transactions/IncrementFi_Restake.cdc`:
+Minimal restake flow connectors used in `cadence/transactions/increment_fi_restake.cdc`: 
 - Source: `IncrementFiStakingConnectors.PoolRewardsSource`
 - Swapper: `IncrementFiPoolLiquidityConnectors.Zapper` (token types and `stableMode` from pair)
 - SwapSource: `SwapConnectors.SwapSource(swapper, source)`
@@ -234,7 +265,7 @@ flow test
 
 Lint a transaction:
 ```bash
-flow cadence lint cadence/transactions/IncrementFi_Restake.cdc --network emulator
+flow cadence lint cadence/transactions/increment_fi_restake.cdc --network emulator
 ```
 
 Note on checks: static checks that resolve imports require the target network to be up and/or contracts deployed. Prefer running against `--network testnet` for live protocol state.
