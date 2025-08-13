@@ -5,6 +5,24 @@
 			"aliases": {
 				"testing": "0000000000000007"
 			}
+		},
+		"TestTokenMinter": {
+			"source": "cadence/contracts/mock/TestTokenMinter.cdc",
+			"aliases": {
+				"testing": "0000000000000007"
+			}
+		},
+		"TokenA": {
+			"source": "cadence/contracts/mock/TokenA.cdc",
+			"aliases": {
+				"testing": "0000000000000007"
+			}
+		},
+		"TokenB": {
+			"source": "cadence/contracts/mock/TokenB.cdc",
+			"aliases": {
+				"testing": "0000000000000007"
+			}
 		}
 	},
 	"dependencies": {
@@ -311,7 +329,7 @@
 		},
 		"IncrementFiPoolLiquidityConnectors": {
 			"source": "mainnet://efa9bd7d1b17f1ed.IncrementFiPoolLiquidityConnectors",
-			"hash": "333d19a7449db13e5da850b8ab9abd233fd9ed05960dc563a1fdca0262331d76",
+			"hash": "962a742ec92e9aaed818f42991d1b26bf7515421544e4a91d82aa76c8d0628e7",
 			"aliases": {
 				"mainnet": "efa9bd7d1b17f1ed",
 				"testnet": "49bae091e5ea16b5"
@@ -442,6 +460,14 @@
 				"testnet": "8d5b9dd833e176da"
 			}
 		},
+		"SwapPair": {
+			"source": "mainnet://ecbda466e7f191c7.SwapPair",
+			"hash": "69b99c4a8abc123a0a88b1c354f9da414a32e2f73194403e67e89d51713923c0",
+			"aliases": {
+				"mainnet": "ecbda466e7f191c7",
+				"testnet": "7afd587a5d5e2efe"
+			}
+		},
 		"SwapRouter": {
 			"source": "mainnet://a6850776a94e6551.SwapRouter",
 			"hash": "2ae9ecd237b7ea36b4fcc87f415d181b437543722a64f18094e026252607932c",
@@ -467,11 +493,20 @@
 				"mainnet": "1d7e57aa55817448",
 				"testnet": "631e88ae7f1d7c20"
 			}
+		},
+		"stFlowToken": {
+			"source": "mainnet://d6f80565193ad727.stFlowToken",
+			"hash": "09b1350a55646fdee652fddf7927fc4b305da5a265cb1bd887e112d84fb5e2be",
+			"aliases": {
+				"mainnet": "d6f80565193ad727",
+				"testnet": "e45c64ecfe31e465"
+			}
 		}
 	},
 	"networks": {
 		"emulator": "127.0.0.1:3569",
 		"mainnet": "access.mainnet.nodes.onflow.org:9000",
+		"mainnet-emulator": "127.0.0.1:3569",
 		"testing": "127.0.0.1:3569",
 		"testnet": "access.devnet.nodes.onflow.org:9000"
 	},
@@ -481,6 +516,20 @@
 			"key": {
 				"type": "file",
 				"location": "emulator-account.pkey"
+			}
+		},
+		"test": {
+			"address": "a866a5e4f4d49b2d",
+			"key": {
+				"type": "file",
+				"location": "test.pkey"
+			}
+		},
+		"testnet": {
+			"address": "daac4c96b1ea362d",
+			"key": {
+				"type": "file",
+				"location": "testnet.pkey"
 			}
 		}
 	},
@@ -494,7 +543,15 @@
 				"IncrementFiFlashloanConnectors",
 				"SwapInterfaces",
 				"SwapConfig",
-				"SwapFactory",
+				{
+					"name": "SwapFactory",
+					"args": [
+						{
+							"value": "0xf8d6e0586b0a20c7",
+							"type": "Address"
+						}
+					]
+				},
 				"SwapError",
 				"StableSwapFactory",
 				"IncrementFiPoolLiquidityConnectors",
@@ -507,7 +564,26 @@
 				"UniswapV2SwapConnectors",
 				"BandOracleConnectors",
 				"BandOracle",
-				"FungibleTokenConnectors"
+				"FungibleTokenConnectors",
+				"stFlowToken",
+				"TokenA",
+				"TokenB",
+				"TestTokenMinter"
+			]
+		},
+		"mainnet": {
+			"testnet": [
+				"ExampleConnectors"
+			]
+		},
+		"mainnet-emulator": {
+			"test": [
+				"ExampleConnectors"
+			]
+		},
+		"testnet": {
+			"testnet": [
+				"ExampleConnectors"
 			]
 		}
 	}
