@@ -82,12 +82,40 @@ See the Flow CLI Dependency Manager docs for details: [Dependency Manager](https
 - This deploys the dependencies listed under `deployments.emulator` in `flow.json` to the local dev account
 - Some protocol state (pairs/pools) may not exist on emulator by default; transactions that depend on live IncrementFi state may require custom local bootstrap
 
+##### Create `emulator-account.pkey` (required)
+If your `flow.json` references a key file for the `emulator-account`, create one and run the emulator with that same key so signing matches the service account. This is required; starting the emulator without the same private key will cause deploys/signing to fail.
+
+1) Generate a key pair and copy the private key hex
+```bash
+flow keys generate --sig-algo ECDSA_P256 --hash-algo SHA3_256
+# Copy the "Private Key" value from the output (hex string)
+```
+
+2) Save the private key to `emulator-account.pkey` in the project root
+```bash
+printf "<PASTE_PRIVATE_KEY_HEX_HERE>" > emulator-account.pkey
+```
+
+3) Start the emulator using the same key and algos
+```bash
+flow emulator \
+  --service-priv-key $(cat emulator-account.pkey) \
+  --service-sig-algo ECDSA_P256 \
+  --service-hash-algo SHA3_256 \
+  --service-addr f8d6e0586b0a20c7
+```
+
+4) Deploy contracts (in a separate terminal)
+```bash
+flow project deploy --network emulator
+```
+
 #### Option B: Testnet (recommended for live protocol state)
 
 1. Create or configure a testnet account in `flow.json`:
-   ```bash
-   flow accounts create --network testnet
-   ```
+```bash
+flow accounts create --network testnet
+```
 
 2. Ensure dependencies in `flow.json` include `testnet` aliases (this scaffold includes many prefilled)
 
@@ -110,33 +138,36 @@ If you restart the emulator, redeploy.
 
 #### For Testnet
 1. Create an account:
-   ```bash
-   flow accounts create --network testnet
-   ```
+```bash
+flow accounts create --network testnet
+```
 
 2. Add a signer alias in `flow.json` under `accounts` with its address and key file:
-   ```json
-   {
-     "accounts": {
-       "testnet-account": {
-         "address": "<YOUR_TESTNET_ADDRESS>",
-         "key": { "type": "file", "location": "testnet-account.pkey" }
-       }
-     }
-   }
-   ```
+```json
+{
+  "accounts": {
+    "testnet-account": {
+      "address": "<YOUR_TESTNET_ADDRESS>",
+      "key": { "type": "file", "location": "testnet-account.pkey" }
+    }
+  }
+}
+```
 
 3. Fund it via the Testnet Faucet: [testnet-faucet.onflow.org](https://testnet-faucet.onflow.org)
 
+4. Quick link (Testnet): Create your `Staking.UserCertificate` using this Flow Script Runner: https://run.dnz.dev/snippet/12d94bff356ed607
+
 #### For Mainnet
 1. Add your mainnet account to `flow.json` under `accounts` (address + key file or env)
-   - Docs: [Flow CLI Accounts](https://developers.flow.com/tools/flow-cli/accounts) | [Keys](https://developers.flow.com/tools/flow-cli/keys)
+- Docs: [Flow CLI Accounts](https://developers.flow.com/tools/flow-cli/accounts) | [Keys](https://developers.flow.com/tools/flow-cli/keys)
 
 2. Ensure sufficient FLOW for fees and storage
-   - See [Fees](https://developers.flow.com/build/basics/fees) and your wallet provider
+- See [Fees](https://developers.flow.com/build/basics/fees) and your wallet provider
 
 Protocol requirement:
 - Ensure the signer has `Staking.UserCertificate` at `Staking.UserCertificateStoragePath`. If already staking in the target IncrementFi pool, you likely have one; otherwise follow the IncrementFi staking docs to initialize it.
+- Quick link (Mainnet): Create your `Staking.UserCertificate` using this Flow Script Runner: https://run.dnz.dev/snippet/d1bf715483551879
 
 ## ▶️ Run the IncrementFi Restake Transaction
 
