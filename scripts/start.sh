@@ -276,7 +276,7 @@ log_detail "   🎯 Creating staking pool #0..."
               { "name": "endTimestamp",     "value": { "type": "UFix64", "value": "0.00000000" } },
               { "name": "rewardPerSession", "value": { "type": "UFix64", "value": "1.00000000" } },
               { "name": "sessionInterval",  "value": { "type": "UFix64", "value": "1.00000000" } },
-              { "name": "rewardTokenKey",   "value": { "type": "String", "value": "A.179b6b1cb6755e31.SwapPair.Vault" } },
+              { "name": "rewardTokenKey",   "value": { "type": "String", "value": "A.f8d6e0586b0a20c7.TokenA" } },
               { "name": "totalReward",      "value": { "type": "UFix64", "value": "0.00000000" } },
               { "name": "lastRound",        "value": { "type": "UInt64", "value": "0" } },
               { "name": "totalRound",       "value": { "type": "UInt64", "value": "0" } },

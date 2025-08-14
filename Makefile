@@ -5,19 +5,19 @@ FLOW := flow
 NETWORK ?= emulator
 SIGNER ?= emulator-account
 
-.PHONY: start deploy lint test
+.PHONY: start emulator deploy test
 
 # Start emulator and deploy contracts
 start:
 	bash scripts/start.sh
 
+# Alias for start (emulator environment)
+emulator:
+	bash scripts/start.sh
+
 # Deploy configured contracts to the selected network
 deploy:
 	$(FLOW) project deploy --network $(NETWORK)
-
-# Lint main transaction(s)
-lint:
-	$(FLOW) cadence lint cadence/transactions/increment_fi_restake.cdc --network $(NETWORK)
 
 # Run cadence tests
 test:

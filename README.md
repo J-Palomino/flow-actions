@@ -44,6 +44,15 @@ References:
 - Flow CLI: install from the [Flow CLI docs](https://developers.flow.com/tools/flow-cli/install)
 - Cursor + Cadence extension (recommended): [Cadence Extension](https://marketplace.visualstudio.com/items?itemName=onflow.cadence)
 
+## ⚡ Quick Commands (Makefile)
+
+```bash
+make start      # Start emulator with full Increment Fi environment
+make emulator   # Alias for 'make start' 
+make deploy     # Deploy contracts to network (NETWORK=emulator|testnet|mainnet)
+make test       # Run Cadence tests
+```
+
 ## ⚠️ Important: Account Configuration Required
 
 **You must replace the default accounts in `flow.json` with your own accounts before using this scaffold.**
@@ -129,7 +138,42 @@ See the Flow CLI Dependency Manager docs for details: [Dependency Manager](https
 
 ### 2. Choose your deployment option
 
-#### Option A: Emulator (local)
+#### Option A: Emulator (local) - Quick Start
+
+**🚀 Recommended: Use the automated setup**
+
+1. **Start the complete Increment Fi environment**:
+   ```bash
+   make start
+   ```
+
+   This script will automatically:
+   - Start the Flow emulator and deploy Increment Fi dependencies
+   - Create test tokens: **TokenA** and **TokenB** (1M each)
+   - Set up liquidity pool: **TokenA-TokenB** pair (100k each token)
+   - Create staking pool #0 with 50k pre-staked LP tokens
+   - Display environment summary
+
+2. **Test the restake transaction** (in a separate terminal):
+   ```bash
+   flow transactions send cadence/transactions/increment_fi_restake.cdc \
+     --signer emulator-account \
+     --network emulator \
+     --args-json '[{"type":"UInt64","value":"0"}]'
+   ```
+
+**Why Pool ID `0`?** The automated setup creates the first (and only) staking pool with ID `0`. This is the pool that contains your staked LP tokens and generates rewards for testing the restake flow.
+
+**🎯 What this gives you:**
+- **TokenA-TokenB liquidity pool** with 100k tokens each
+- **Staking pool #0** with 50k LP tokens already staked and earning rewards
+- **Ready-to-use environment** for testing Increment Fi restake transactions
+
+**Note:** The `make start`/`make emulator` command handles all account setup automatically using the built-in emulator service account, so no manual key generation is needed.
+
+#### Option A (Manual): Emulator setup
+
+If you prefer manual setup:
 
 1. Start the emulator (terminal A):
    ```bash
@@ -264,18 +308,24 @@ flow transactions send cadence/transactions/increment_fi_restake.cdc \
   --args-json '[{"type":"UInt64","value":"<POOL_PID>"}]'
 ```
 
-Emulator example (after deploy):
+Emulator example (using automated setup):
 ```bash
+# Terminal 1: Start the complete Increment Fi environment
+make emulator
+
+# Terminal 2: Send restake transaction  
 flow transactions send cadence/transactions/increment_fi_restake.cdc \
   --network emulator \
   --signer emulator-account \
   --args-json '[{"type":"UInt64","value":"0"}]'
 ```
 
+**Pool ID `0`**: The `make emulator` command creates a complete test environment with staking pool #0 containing pre-staked LP tokens and active rewards, making it perfect for testing the restake flow.
+
 Requirements:
-- Signer must have `Staking.UserCertificate` at `Staking.UserCertificateStoragePath`.
-- `pid` must be a valid pool with rewards and a corresponding pair.
-- Ensure `flow deps install` has been run after cloning so string-based imports resolve via `flow.json` aliases.
+- Signer must have `Staking.UserCertificate` at `Staking.UserCertificateStoragePath` (✅ automatically configured by `make emulator`).
+- `pid` must be a valid pool with rewards and a corresponding pair (✅ pool #0 created by `make emulator`).
+- Ensure `flow deps install` has been run after cloning so string-based imports resolve via `flow.json` aliases (✅ automatically run by `make emulator`).
 - On mainnet, ensure your signer has sufficient FLOW for tx and storage; verify connector addresses match `flow.json` dependencies.
 
 ## 🧭 Flow Actions Composition (quick reference)
@@ -298,15 +348,10 @@ String-based imports are used throughout (see file for full example). Safety inv
 
 Run Cadence tests:
 ```bash
+make test
+# or directly:
 flow test
 ```
-
-Lint a transaction:
-```bash
-flow cadence lint cadence/transactions/increment_fi_restake.cdc --network emulator
-```
-
-Note on checks: static checks that resolve imports require the target network to be up and/or contracts deployed. Prefer running against `--network testnet` for live protocol state.
 
 ## 🔗 Helpful Links
 
