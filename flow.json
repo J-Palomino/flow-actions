@@ -530,14 +530,6 @@
 				"type": "file",
 				"location": "testnet.pkey"
 			}
-		},
-		"user": {
-			"address": "72367c5686fa16e1",
-			"key": {
-				"type": "file",
-				"location": "user.pkey",
-				"index": 0
-			}
 		}
 	},
 	"deployments": {
