@@ -506,7 +506,6 @@
 	"networks": {
 		"emulator": "127.0.0.1:3569",
 		"mainnet": "access.mainnet.nodes.onflow.org:9000",
-		"mainnet-emulator": "127.0.0.1:3569",
 		"testing": "127.0.0.1:3569",
 		"testnet": "access.devnet.nodes.onflow.org:9000"
 	},
@@ -518,11 +517,11 @@
 				"location": "emulator-account.pkey"
 			}
 		},
-		"test": {
-			"address": "a866a5e4f4d49b2d",
+		"mainnet": {
+			"address": "0e5b1dececaca3a8",
 			"key": {
 				"type": "file",
-				"location": "test.pkey"
+				"location": "mainnet.pkey"
 			}
 		},
 		"testnet": {
@@ -530,6 +529,14 @@
 			"key": {
 				"type": "file",
 				"location": "testnet.pkey"
+			}
+		},
+		"user": {
+			"address": "72367c5686fa16e1",
+			"key": {
+				"type": "file",
+				"location": "user.pkey",
+				"index": 0
 			}
 		}
 	},
@@ -572,12 +579,7 @@
 			]
 		},
 		"mainnet": {
-			"testnet": [
-				"ExampleConnectors"
-			]
-		},
-		"mainnet-emulator": {
-			"test": [
+			"mainnet": [
 				"ExampleConnectors"
 			]
 		},

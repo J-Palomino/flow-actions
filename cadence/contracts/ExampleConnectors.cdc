@@ -10,7 +10,7 @@
 // Safety:
 // - depositCapacity enforces type equality with a precondition
 // - Withdrawals are sized by callers via minimumCapacity() or DeFiActions patterns
-import "FungibleToken"
+import "FungibleToken" 
 import "DeFiActions"
 
 access(all) contract ExampleConnectors {

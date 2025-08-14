@@ -44,6 +44,41 @@ References:
 - Flow CLI: install from the [Flow CLI docs](https://developers.flow.com/tools/flow-cli/install)
 - Cursor + Cadence extension (recommended): [Cadence Extension](https://marketplace.visualstudio.com/items?itemName=onflow.cadence)
 
+## ⚠️ Important: Account Configuration Required
+
+**You must replace the default accounts in `flow.json` with your own accounts before using this scaffold.**
+
+The scaffold includes placeholder accounts that you need to replace:
+
+### Option 1: Use Flow CLI to create accounts automatically
+```bash
+# For testnet
+flow accounts create --network testnet
+
+# For mainnet  
+flow accounts create --network mainnet
+```
+This will automatically update your `flow.json` with the new account details.
+
+### Option 2: Manually configure flow.json
+If you have existing accounts, manually add them to the `accounts` section in `flow.json`:
+```json
+{
+  "accounts": {
+    "my-testnet-account": {
+      "address": "0x1234567890abcdef", 
+      "key": { "type": "file", "location": "my-testnet-account.pkey" }
+    },
+    "my-mainnet-account": {
+      "address": "0xabcdef1234567890",
+      "key": { "type": "file", "location": "my-mainnet-account.pkey" }
+    }
+  }
+}
+```
+
+**Note**: Make sure your private key files (`.pkey`) are in the project root and match the `location` specified in `flow.json`.
+
 ## 📦 Project Structure
 
 ```
