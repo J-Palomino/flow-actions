@@ -1,15 +1,15 @@
-## 👋 Welcome to the DeFiActions Scaffold
+## 👋 Welcome to the Flow Actions Scaffold
 
-This repository is a scaffold for building with Flow Actions (DeFiActions) and includes AI-friendly guidance for composing safe Cadence transactions from standardized connectors.
+This repository is a scaffold for building with Flow Actions and includes AI-friendly guidance for composing safe Cadence transactions from standardized connectors.
 
 - **What’s included**:
-  - Minimal Flow project with dependencies for DeFiActions and IncrementFi connectors
+  - Minimal Flow project with dependencies for Flow Actions and IncrementFi connectors
   - Example transaction: Claim → Zap → Restake for IncrementFi LP rewards
-  - Cursor rules context for DeFiActions; helpful for agent-assisted development ([Cursor Rules](https://docs.cursor.com/en/context/rules))
+  - Cursor rules context for Flow Actions; helpful for agent-assisted development ([Cursor Rules](https://docs.cursor.com/en/context/rules))
 
 References:
 - FLIP-338: Flow Actions – composable standards for protocols ([FLIP PR #339](https://github.com/onflow/flips/pull/339))
-- DeFiActions repo: [onflow/DeFiActions](https://github.com/onflow/DeFiActions)
+- FlowActions repo: [onflow/FlowActions](https://github.com/onflow/FlowActions)
 
 ## 🚀 Quick Start: Mainnet
 
@@ -17,7 +17,7 @@ References:
 - **1) Clone and install deps**:
   ```bash
   git clone <REPO_URL>
-  cd defiactions-scaffold
+  cd flow-actions-scaffold
   flow deps install
   ```
 - **2) Create or configure your signer**:
@@ -47,8 +47,8 @@ References:
 ## 📦 Project Structure
 
 ```
-defiactions-scaffold/
-├── flow.json                              # Project configuration with DeFiActions/IncrementFi dependencies
+flow-actions-scaffold/
+├── flow.json                              # Project configuration with FlowActions/IncrementFi dependencies
 ├── README.md                              # This file
 └── cadence/
     ├── contracts/                         # 🔌 Connector Contracts
@@ -243,7 +243,7 @@ Requirements:
 - Ensure `flow deps install` has been run after cloning so string-based imports resolve via `flow.json` aliases.
 - On mainnet, ensure your signer has sufficient FLOW for tx and storage; verify connector addresses match `flow.json` dependencies.
 
-## 🧭 DeFiActions Composition (quick reference)
+## 🧭 Flow Actions Composition (quick reference)
 
 Minimal restake flow connectors used in `cadence/transactions/increment_fi_restake.cdc`: 
 - Source: `IncrementFiStakingConnectors.PoolRewardsSource`
@@ -255,7 +255,7 @@ String-based imports are used throughout (see file for full example). Safety inv
 
 ## 💬 Example AI prompts
 - "Create me a Cadence transaction which restakes my Increment Fi LP token staking rewards"
-- "Generate a minimal restake transaction using DeFiActions connectors (PoolRewardsSource → Zapper via SwapSource → PoolSink) with string imports and safety invariants"
+- "Generate a minimal restake transaction using Flow Actions connectors (PoolRewardsSource → Zapper via SwapSource → PoolSink) with string imports and safety invariants"
 - "Compose a SwapSource from PoolRewardsSource and IncrementFiPoolLiquidityConnectors.Zapper, then stake to IncrementFiStakingConnectors.PoolSink with pre/post checks and residual assertion"
 - "Add a post condition verifying the stake increased by the expected zapper.quoteOut amount"
 
