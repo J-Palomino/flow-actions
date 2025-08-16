@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FLOW_BIN="${FLOW_BIN:-flow}"
+FLOW_BIN="${FLOW_BIN:-./flow-cli.exe}"
 NETWORK="${NETWORK:-emulator}"
 
 # Color codes
@@ -65,9 +65,9 @@ log_success "✅ Emulator started on localhost:3569"
 
 echo ""
 log_info "📦 Installing Flow dependencies..."
-"$FLOW_BIN" deps install || true
+"$FLOW_BIN" deps install --network emulator || true
 log_info "🚀 Deploying contracts to $NETWORK..."
-"$FLOW_BIN" project deploy --network "$NETWORK" || true
+"$FLOW_BIN" project deploy --network "$NETWORK" --update || true
 
 echo ""
 log_highlight "🔧 Setting up Increment Fi Infrastructure..."

@@ -1,5 +1,11 @@
 {
 	"contracts": {
+		"AccountFactory": {
+			"source": "cadence/contracts/AccountFactory.cdc",
+			"aliases": {
+				"testing": "0000000000000007"
+			}
+		},
 		"ExampleConnectors": {
 			"source": "cadence/contracts/ExampleConnectors.cdc",
 			"aliases": {
@@ -40,6 +46,7 @@
 			"source": "mainnet://f627b5c89141ed99.BandOracleConnectors",
 			"hash": "58721b4bd32126489a9d24a1bf229c8296457813f4c733d9e263d2caac070339",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "f627b5c89141ed99",
 				"testnet": "1a9f5d18d096cd7a"
 			}
@@ -86,6 +93,7 @@
 			"source": "mainnet://92195d814edf9cb0.DeFiActions",
 			"hash": "67175b2a2569bdff79c221ec7ac823c79dd59c83bce07582cfc3b675dfbe6207",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "92195d814edf9cb0",
 				"testnet": "4c2ff9dd03ab442f"
 			}
@@ -94,6 +102,7 @@
 			"source": "mainnet://92195d814edf9cb0.DeFiActionsMathUtils",
 			"hash": "f2ae511846ea9a545380968837f47a4198447c008e575047f3ace3b7cf782067",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "92195d814edf9cb0",
 				"testnet": "4c2ff9dd03ab442f"
 			}
@@ -102,6 +111,7 @@
 			"source": "mainnet://92195d814edf9cb0.DeFiActionsUtils",
 			"hash": "d01ab8cd8a57aee3e35ca8a9038f98de2321d6246e03285e0107ef6b4191bff1",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "92195d814edf9cb0",
 				"testnet": "4c2ff9dd03ab442f"
 			}
@@ -236,6 +246,7 @@
 			"source": "mainnet://1d9a619393e9fb53.FungibleTokenConnectors",
 			"hash": "01dd4a81d57f079316ff27e3980de1b895e2c50002e47d3c20f68bbf694e54b0",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "1d9a619393e9fb53",
 				"testnet": "5a7b9cee9aaf4e4e"
 			}
@@ -323,6 +334,7 @@
 			"source": "mainnet://efa9bd7d1b17f1ed.IncrementFiFlashloanConnectors",
 			"hash": "28c40fa62c44354316a3794456fe2b84ec406ee588133ccafbe99f59e7326a67",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "efa9bd7d1b17f1ed",
 				"testnet": "49bae091e5ea16b5"
 			}
@@ -331,6 +343,7 @@
 			"source": "mainnet://efa9bd7d1b17f1ed.IncrementFiPoolLiquidityConnectors",
 			"hash": "962a742ec92e9aaed818f42991d1b26bf7515421544e4a91d82aa76c8d0628e7",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "efa9bd7d1b17f1ed",
 				"testnet": "49bae091e5ea16b5"
 			}
@@ -339,6 +352,7 @@
 			"source": "mainnet://efa9bd7d1b17f1ed.IncrementFiStakingConnectors",
 			"hash": "ad0fafe9446d59018bcf2091fa11fa15ce34e7bb1f1ad660b3c7ce0068be6c6b",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "efa9bd7d1b17f1ed",
 				"testnet": "49bae091e5ea16b5"
 			}
@@ -347,6 +361,7 @@
 			"source": "mainnet://efa9bd7d1b17f1ed.IncrementFiSwapConnectors",
 			"hash": "f018bbc0e8d21534280570a02f839ae24c7dde4064232c181c2c1bb5d94363bb",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "efa9bd7d1b17f1ed",
 				"testnet": "49bae091e5ea16b5"
 			}
@@ -429,6 +444,7 @@
 			"source": "mainnet://0bce04a00aedf132.SwapConnectors",
 			"hash": "5cec3b1be3c454d3949686ddfb4cb5dc36e91ae7cec4cca31f3d416cd7772006",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "0bce04a00aedf132",
 				"testnet": "addd594cf410166a"
 			}
@@ -464,6 +480,7 @@
 			"source": "mainnet://ecbda466e7f191c7.SwapPair",
 			"hash": "69b99c4a8abc123a0a88b1c354f9da414a32e2f73194403e67e89d51713923c0",
 			"aliases": {
+				"emulator": "179b6b1cb6755e31",
 				"mainnet": "ecbda466e7f191c7",
 				"testnet": "7afd587a5d5e2efe"
 			}
@@ -481,6 +498,7 @@
 			"source": "mainnet://0e5b1dececaca3a8.UniswapV2SwapConnectors",
 			"hash": "12f750f42b9f7c988c4d4cc675129ead997f3e1e75cceb06a3acf2b5d3488e2f",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "0e5b1dececaca3a8",
 				"testnet": "fef8e4c5c16ccda5"
 			}
@@ -498,6 +516,7 @@
 			"source": "mainnet://d6f80565193ad727.stFlowToken",
 			"hash": "09b1350a55646fdee652fddf7927fc4b305da5a265cb1bd887e112d84fb5e2be",
 			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
 				"mainnet": "d6f80565193ad727",
 				"testnet": "e45c64ecfe31e465"
 			}
@@ -567,7 +586,8 @@
 				"stFlowToken",
 				"TokenA",
 				"TokenB",
-				"TestTokenMinter"
+				"TestTokenMinter",
+				"AccountFactory"
 			]
 		},
 		"mainnet": {

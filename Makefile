@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-FLOW := flow
+FLOW := ./flow-cli.exe
 
 # Defaults
 NETWORK ?= emulator
