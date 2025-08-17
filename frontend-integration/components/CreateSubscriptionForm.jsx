@@ -28,9 +28,9 @@ const CreateSubscriptionForm = () => {
 
     const {
         createSubscriptionVault,
-        getVaultInfo,
+        getUserSubscriptions,
+        getUserVaultIds,
         checkFlowBalance,
-        checkVaultExists,
         topUpSubscription,
         isLoading,
         error,
@@ -39,7 +39,18 @@ const CreateSubscriptionForm = () => {
 
     // Subscribe to user authentication state
     useEffect(() => {
-        fcl.currentUser.subscribe(setUser);
+        const unsubscribe = fcl.currentUser.subscribe((currentUser) => {
+            console.log('📱 FCL User state changed:', {
+                loggedIn: currentUser.loggedIn,
+                addr: currentUser.addr,
+                services: currentUser.services?.length || 0
+            });
+            setUser(currentUser);
+        });
+        
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
     }, []);
 
     // Load user's Flow balance and vault info when connected
@@ -56,33 +67,50 @@ const CreateSubscriptionForm = () => {
 
     const loadUserData = async () => {
         try {
+            if (!user.addr) {
+                console.warn('⚠️ Cannot load user data - no address available');
+                return;
+            }
+            
+            console.log(`🔍 Loading data for user ${user.addr}`);
+            
             // Check Flow balance
             const balance = await checkFlowBalance(user.addr);
             setFlowBalance(balance);
+            console.log(`💰 User balance: ${balance} FLOW`);
 
-            // Check if vault exists first
-            const vaultExists = await checkVaultExists(user.addr);
-            console.log('Vault exists:', vaultExists);
-
-            if (vaultExists) {
-                // Try to get vault info
-                try {
-                    const info = await getVaultInfo(user.addr);
-                    console.log('Vault info:', info);
-                    setVaultInfo(info);
-                } catch (infoErr) {
-                    console.error('Error getting vault info:', infoErr);
-                    // Vault exists but can't read info - might be a capability issue
-                    setVaultInfo({
-                        exists: true,
-                        error: 'Unable to read vault details. Check capability setup.'
-                    });
-                }
+            // Get user subscriptions directly from blockchain
+            console.log('🔍 Checking for existing subscriptions on blockchain...');
+            const subscriptions = await getUserSubscriptions(user.addr);
+            
+            if (subscriptions.length > 0) {
+                // User has existing subscriptions
+                console.log(`✅ Found ${subscriptions.length} subscriptions on blockchain`);
+                const latestSubscription = subscriptions[0]; // Get the most recent one
+                setVaultInfo({
+                    exists: true,
+                    vaultId: latestSubscription.vaultId,
+                    balance: latestSubscription.balance,
+                    tier: latestSubscription.currentTier || 'Starter',
+                    currentPrice: latestSubscription.currentPrice || 0,
+                    selectedModels: latestSubscription.selectedModels || [],
+                    withdrawLimit: latestSubscription.withdrawLimit || 0,
+                    usedAmount: latestSubscription.usedAmount || 0,
+                    isActive: latestSubscription.isActive,
+                    totalPaidAmount: latestSubscription.totalPaidAmount || 0,
+                    lastUpdate: latestSubscription.lastOracleUpdate || 0,
+                    source: 'blockchain'
+                });
             } else {
+                console.log('📭 No subscriptions found on blockchain');
                 setVaultInfo(null);
             }
         } catch (err) {
             console.error('Error loading user data:', err);
+            setVaultInfo({
+                exists: false,
+                error: `Error loading subscription data: ${err.message}`
+            });
         }
     };
 
@@ -135,12 +163,13 @@ const CreateSubscriptionForm = () => {
     const handleCreateSubscription = async (e) => {
         e.preventDefault();
         
-        if (!user.loggedIn) {
+        // Double-check authentication state
+        if (!user.loggedIn || !user.addr) {
             alert('Please connect your Flow wallet first');
             return;
         }
 
-        if (flowBalance < parseFloat(depositAmount)) {
+        if (flowBalance === null || flowBalance < parseFloat(depositAmount)) {
             alert('Insufficient Flow balance');
             return;
         }
@@ -149,6 +178,11 @@ const CreateSubscriptionForm = () => {
             alert('Please select at least 1 model (up to 3 maximum)');
             return;
         }
+
+        console.log('🚀 Starting subscription creation...');
+        console.log('   User logged in:', user.loggedIn);
+        console.log('   User address:', user.addr);
+        console.log('   Selected models:', selectedModels.length);
 
         const result = await createSubscriptionVault(
             providerAddress, 
@@ -232,10 +266,14 @@ const CreateSubscriptionForm = () => {
                 <p><strong>Flow Balance:</strong> {flowBalance !== null ? `${flowBalance.toFixed(2)} FLOW` : 'Loading...'}</p>
                 {vaultInfo && !vaultInfo.error && (
                     <div className="mt-2 p-2 bg-green-50 rounded">
-                        <p className="text-green-800"><strong>✅ Subscription Vault Active</strong></p>
+                        <p className="text-green-800"><strong>✅ Subscription Vault Active (Vault #{vaultInfo.vaultId})</strong></p>
                         <p>Balance: {parseFloat(vaultInfo.balance || 0).toFixed(2)} FLOW</p>
-                        <p>Tier: {vaultInfo.tier || 'Unknown'}</p>
+                        <p>Tier: {vaultInfo.tier || 'Starter'}</p>
                         <p>Current Price: ${parseFloat(vaultInfo.currentPrice || 0).toFixed(4)}</p>
+                        {vaultInfo.selectedModels && vaultInfo.selectedModels.length > 0 && (
+                            <p>Selected Models: {vaultInfo.selectedModels.join(', ')}</p>
+                        )}
+                        <p className="text-xs text-green-600">Source: {vaultInfo.source || 'blockchain'}</p>
                     </div>
                 )}
                 {vaultInfo && vaultInfo.error && (
@@ -512,9 +550,9 @@ const CreateSubscriptionForm = () => {
 
                     <button
                         type="submit"
-                        disabled={isLoading || !flowBalance || flowBalance < parseFloat(depositAmount)}
+                        disabled={isLoading || !user.loggedIn || !user.addr || !flowBalance || flowBalance < parseFloat(depositAmount) || selectedModels.length === 0}
                         className={`w-full py-3 px-4 rounded-lg font-medium ${
-                            isLoading || !flowBalance || flowBalance < parseFloat(depositAmount)
+                            isLoading || !user.loggedIn || !user.addr || !flowBalance || flowBalance < parseFloat(depositAmount) || selectedModels.length === 0
                                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 : 'bg-green-500 text-white hover:bg-green-600'
                         }`}

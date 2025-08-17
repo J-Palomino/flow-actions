@@ -1,24 +1,74 @@
-import { config } from '@onflow/fcl';
+import * as fcl from '@onflow/fcl';
 
-// Flow configuration for mainnet
-config({
-    'accessNode.api': 'https://rest-mainnet.onflow.org', // Mainnet Access Node
-    'discovery.wallet': 'https://fcl-discovery.onflow.org/authn', // Mainnet Wallet Discovery
-    'app.detail.title': 'Usage-Based Subscriptions with Flare Oracle', // Your app name
-    'app.detail.icon': 'https://placekitten.com/g/200/200', // Your app icon
-    'flow.network': 'mainnet'
-});
-
-// Contract addresses on mainnet
-export const CONTRACTS = {
-    FlowToken: '0x1654653399040a61',
-    FungibleToken: '0xf233dcee88fe0abe',
-    SimpleUsageSubscriptions: '0x6daee039a7b9c2f0',
-    UsageBasedSubscriptions: '0x6daee039a7b9c2f0',
-    FlareFDCTriggers: '0x6daee039a7b9c2f0',
-    LayerZeroConnectors: '0x6daee039a7b9c2f0',
-    ExampleConnectors: '0x6daee039a7b9c2f0'
+// Force mainnet only - no emulator, no mock data
+const getFlowEnvironment = () => {
+    // ALWAYS use mainnet with real data
+    return 'mainnet';
 };
+
+const FLOW_ENV = getFlowEnvironment();
+console.log('🌊 Flow Environment detected:', FLOW_ENV);
+
+// Mainnet-only configuration for Dynamic/Privy wallet integration
+const FLOW_CONFIGS = {
+    mainnet: {
+        'accessNode.api': 'https://rest-mainnet.onflow.org',
+        'discovery.wallet': 'https://fcl-discovery.onflow.org/authn',
+        'discovery.wallet.method': 'IFRAME/RPC',
+        'app.detail.title': 'FlareFlow.link - Usage-Based Subscriptions (Mainnet)',
+        'app.detail.icon': 'https://placekitten.com/g/200/200', 
+        'flow.network': 'mainnet'
+    }
+};
+
+// Configure FCL for detected environment
+const currentConfig = FLOW_CONFIGS[FLOW_ENV];
+
+// Configure FCL for mainnet with Dynamic/Privy wallet support
+try {
+  fcl.config()
+    .put('accessNode.api', currentConfig['accessNode.api'])
+    .put('discovery.wallet', currentConfig['discovery.wallet'])
+    .put('discovery.wallet.method', currentConfig['discovery.wallet.method'])
+    .put('app.detail.title', currentConfig['app.detail.title'])
+    .put('app.detail.icon', currentConfig['app.detail.icon'])
+    .put('flow.network', currentConfig['flow.network']);
+  
+  console.log('✅ FCL configured successfully for MAINNET (Dynamic/Privy ready)');
+} catch (error) {
+  console.error('❌ FCL configuration error:', error);
+}
+
+// Debug FCL configuration
+console.log('🌊 FCL Configuration:', currentConfig);
+
+// Real mainnet contract addresses only
+const CONTRACT_ADDRESSES = {
+    mainnet: {
+        FlowToken: '0x1654653399040a61',           // Real Flow mainnet
+        FungibleToken: '0xf233dcee88fe0abe',        // Real FungibleToken mainnet  
+        SimpleUsageSubscriptions: '0x6daee039a7b9c2f0',  // Real deployed contract
+        UsageBasedSubscriptions: '0x6daee039a7b9c2f0',   // Real deployed contract
+        FTSOPriceFeedConnector: '0x6daee039a7b9c2f0',    // Real deployed contract
+        FlareFDCTriggers: '0x6daee039a7b9c2f0',          // Real deployed contract
+        LayerZeroConnectors: '0x6daee039a7b9c2f0',       // Real deployed contract
+        ExampleConnectors: '0x6daee039a7b9c2f0'          // Real deployed contract
+    }
+};
+
+// Debug contract addresses
+console.log('🔧 Environment contracts:', CONTRACT_ADDRESSES[FLOW_ENV]);
+
+// FCL Health Check
+console.log('🏥 FCL Health Check:');
+console.log('  - FCL object:', typeof fcl);
+console.log('  - FCL.config:', typeof fcl.config);
+console.log('  - FCL.authenticate:', typeof fcl.authenticate);
+console.log('  - FCL.currentUser:', typeof fcl.currentUser);
+
+// Export contracts for current environment
+export const CONTRACTS = CONTRACT_ADDRESSES[FLOW_ENV];
+export const FLOW_NETWORK = FLOW_ENV;
 
 // Transaction status tracking
 export const TX_STATUS = {
@@ -36,6 +86,5 @@ export const PRICING_TIERS = {
     ENTERPRISE: { name: 'Enterprise', range: '10M+', price: 0.008, discount: 30 }
 };
 
-// Import and re-export fcl
-import * as fcl from '@onflow/fcl';
+// Export fcl
 export { fcl };

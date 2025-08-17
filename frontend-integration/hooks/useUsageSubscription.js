@@ -180,37 +180,35 @@ access(all) fun main(customerAddress: Address): Bool {
     return vaultCap.check()
 }`;
 
-// Query scripts
-const GET_VAULT_INFO_SCRIPT = `
-import SimpleUsageSubscriptions from ${CONTRACTS.SimpleUsageSubscriptions}
+// Query scripts for real blockchain data
+const GET_USER_VAULT_IDS_SCRIPT = `
+import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
 
-access(all) fun main(customerAddress: Address): {String: AnyStruct}? {
-    let account = getAccount(customerAddress)
+access(all) fun main(userAddress: Address): [UInt64] {
+    return UsageBasedSubscriptions.getUserVaultIds(owner: userAddress)
+}`;
+
+const GET_VAULT_INFO_SCRIPT = `
+import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+
+access(all) fun main(vaultId: UInt64): {String: AnyStruct}? {
+    return UsageBasedSubscriptions.getVaultInfo(vaultId: vaultId)
+}`;
+
+const GET_USER_SUBSCRIPTIONS_SCRIPT = `
+import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+
+access(all) fun main(userAddress: Address): [{String: AnyStruct}] {
+    let vaultIds = UsageBasedSubscriptions.getUserVaultIds(owner: userAddress)
+    let subscriptions: [{String: AnyStruct}] = []
     
-    let vaultRef = account.capabilities.borrow<&SimpleUsageSubscriptions.SubscriptionVault>(
-        SimpleUsageSubscriptions.VaultPublicPath
-    )
-    
-    if let vault = vaultRef {
-        // Use the contract's getInfo() method instead of individual field access
-        let info = vault.getInfo()
-        
-        // Add the fields that getInfo() doesn't include
-        let extendedInfo: {String: AnyStruct} = {
-            "vaultId": vault.id,
-            "customer": vault.customer,
-            "provider": vault.provider
+    for vaultId in vaultIds {
+        if let vaultInfo = UsageBasedSubscriptions.getVaultInfo(vaultId: vaultId) {
+            subscriptions.append(vaultInfo)
         }
-        
-        // Merge with getInfo() results
-        for key in info.keys {
-            extendedInfo[key] = info[key]!
-        }
-        
-        return extendedInfo
     }
     
-    return nil
+    return subscriptions
 }`;
 
 const CHECK_BALANCE_SCRIPT = `
@@ -293,9 +291,12 @@ export const useUsageSubscription = () => {
         setTxDetails(null);
 
         try {
-            const userAddress = fcl.currentUser().addr;
-            if (!userAddress) {
-                throw new Error('User must be connected to create subscription');
+            // Get current user from FCL
+            const currentUser = await fcl.currentUser.snapshot();
+            const userAddress = currentUser?.addr;
+            
+            if (!userAddress || !currentUser.loggedIn) {
+                throw new Error('User must be connected to create subscription. Please connect your Flow wallet first.');
             }
 
             console.log('🚀 Creating REAL subscription with user funds and LiteLLM integration...');
@@ -536,13 +537,13 @@ export const useUsageSubscription = () => {
         }
     };
 
-    // Get vault information
-    const getVaultInfo = async (customerAddress) => {
+    // Get vault information from blockchain
+    const getVaultInfo = async (vaultId) => {
         try {
             const result = await fcl.query({
                 cadence: GET_VAULT_INFO_SCRIPT,
                 args: (arg, t) => [
-                    arg(customerAddress, t.Address)
+                    arg(vaultId, t.UInt64)
                 ]
             });
 
@@ -550,6 +551,23 @@ export const useUsageSubscription = () => {
         } catch (err) {
             console.error('Error getting vault info:', err);
             throw err;
+        }
+    };
+    
+    // Get all user vault IDs from blockchain
+    const getUserVaultIds = async (userAddress) => {
+        try {
+            const vaultIds = await fcl.query({
+                cadence: GET_USER_VAULT_IDS_SCRIPT,
+                args: (arg, t) => [
+                    arg(userAddress, t.Address)
+                ]
+            });
+
+            return vaultIds || [];
+        } catch (err) {
+            console.error('Error getting user vault IDs:', err);
+            return [];
         }
     };
 
@@ -599,122 +617,96 @@ export const useUsageSubscription = () => {
         }
     };
 
-    // Get all user subscriptions - REAL DATA FROM BLOCKCHAIN + LITELLM
-    // Supports 1 User -> Many Subscriptions with independent data
+    // Get all user subscriptions - REAL DATA FROM BLOCKCHAIN ONLY
     const getUserSubscriptions = async (userAddress) => {
         try {
-            console.log(`📋 Fetching REAL subscriptions for user ${userAddress} (supporting multiple independent subscriptions)`);
+            console.log(`📋 Fetching REAL subscriptions from Flow blockchain for user ${userAddress}`);
             
-            let allSubscriptions = [];
+            // Get vault IDs directly from blockchain
+            const vaultIds = await getUserVaultIds(userAddress);
+            console.log(`   Found ${vaultIds.length} vaults on blockchain`);
             
-            // Get user-specific subscriptions from local storage first (fastest access)
-            const userSubscriptionKey = `subscriptions_${userAddress}`;
-            let localSubscriptions = [];
-            
-            try {
-                const userStoredSubs = JSON.parse(localStorage.getItem(userSubscriptionKey) || '[]');
-                const globalStoredSubs = JSON.parse(localStorage.getItem('subscriptions') || '[]');
-                
-                // Combine user-specific and global subscriptions, filter by user
-                const combinedLocal = [...userStoredSubs, ...globalStoredSubs.filter(
-                    sub => sub.customer.toLowerCase() === userAddress.toLowerCase() &&
-                    !userStoredSubs.some(userSub => userSub.vaultId === sub.vaultId)
-                )];
-                
-                localSubscriptions = combinedLocal;
-                console.log(`   Found ${localSubscriptions.length} local subscriptions`);
-            } catch (e) {
-                console.log('   No local subscriptions found');
+            if (vaultIds.length === 0) {
+                console.log('   No subscriptions found on blockchain');
+                return [];
             }
             
-            // For each local subscription, fetch real-time LiteLLM usage data to ensure independence
-            const subscriptionsWithRealData = await Promise.all(
-                localSubscriptions.map(async (subscription) => {
-                    try {
-                        if (subscription.litellmKey) {
-                            console.log(`   Fetching independent usage data for vault ${subscription.vaultId}...`);
-                            
-                            // Get real usage data for this specific LiteLLM key
-                            const usageData = await litellmKeyService.getKeyUsage(subscription.litellmKey);
-                            
-                            return {
-                                ...subscription,
-                                usageData: usageData,
-                                lastUpdated: new Date().toISOString(),
-                                independentData: true,
-                                source: 'local+litellm'
-                            };
-                        } else {
-                            return {
-                                ...subscription,
-                                usageData: null,
-                                lastUpdated: new Date().toISOString(),
-                                independentData: false,
-                                source: 'local'
-                            };
+            // Get detailed info for each vault from blockchain
+            const subscriptions = [];
+            for (const vaultId of vaultIds) {
+                try {
+                    console.log(`   Fetching vault ${vaultId} data from blockchain...`);
+                    const vaultInfo = await getVaultInfo(vaultId);
+                    
+                    if (vaultInfo) {
+                        // Get associated LiteLLM key from localStorage (this is just for the key, not the subscription data)
+                        let litellmKey = null;
+                        try {
+                            const localData = JSON.parse(localStorage.getItem('subscriptions') || '[]');
+                            const localSub = localData.find(sub => sub.vaultId === vaultId);
+                            litellmKey = localSub?.litellmKey || null;
+                        } catch (e) {
+                            console.warn(`   No LiteLLM key found in local storage for vault ${vaultId}`);
                         }
-                    } catch (usageErr) {
-                        console.warn(`   Could not fetch usage data for vault ${subscription.vaultId}:`, usageErr.message);
-                        return {
-                            ...subscription,
-                            usageData: null,
-                            usageError: usageErr.message,
-                            lastUpdated: new Date().toISOString(),
-                            independentData: false,
-                            source: 'local'
+                        
+                        // Get real-time usage data if we have the LiteLLM key
+                        let usageData = null;
+                        if (litellmKey) {
+                            try {
+                                console.log(`   Fetching LiteLLM usage data for vault ${vaultId}...`);
+                                usageData = await litellmKeyService.getKeyUsage(litellmKey);
+                            } catch (usageErr) {
+                                console.warn(`   Could not fetch usage data: ${usageErr.message}`);
+                            }
+                        }
+                        
+                        // Convert blockchain data to subscription format
+                        const subscription = {
+                            vaultId: vaultInfo.vaultId,
+                            owner: vaultInfo.owner,
+                            provider: vaultInfo.provider,
+                            serviceName: vaultInfo.serviceName,
+                            balance: parseFloat(vaultInfo.balance || 0),
+                            selectedModels: vaultInfo.selectedModels || [],
+                            modelPricing: vaultInfo.modelPricing || {},
+                            entitlementType: vaultInfo.entitlementType,
+                            withdrawLimit: parseFloat(vaultInfo.withdrawLimit || 0),
+                            usedAmount: parseFloat(vaultInfo.usedAmount || 0),
+                            validUntil: vaultInfo.validUntil,
+                            isActive: vaultInfo.isActive,
+                            currentTier: vaultInfo.currentTier,
+                            basePrice: parseFloat(vaultInfo.basePrice || 0),
+                            currentPrice: parseFloat(vaultInfo.currentPrice || 0),
+                            autoPay: vaultInfo.autoPay,
+                            maxMonthlySpend: parseFloat(vaultInfo.maxMonthlySpend || 0),
+                            lastPaidTokens: vaultInfo.lastPaidTokens || 0,
+                            lastPaidRequests: vaultInfo.lastPaidRequests || 0,
+                            totalPaidAmount: parseFloat(vaultInfo.totalPaidAmount || 0),
+                            lastOracleUpdate: vaultInfo.lastOracleUpdate,
+                            litellmKey: litellmKey,
+                            usageData: usageData,
+                            source: 'blockchain',
+                            blockchainVerified: true,
+                            lastUpdated: new Date().toISOString()
                         };
+                        
+                        subscriptions.push(subscription);
+                        console.log(`   ✅ Vault ${vaultId}: ${subscription.selectedModels.length} models, ${subscription.balance} FLOW`);
                     }
-                })
-            );
-            
-            allSubscriptions = subscriptionsWithRealData;
-            
-            // Optionally try to verify subscription vaults on blockchain
-            // (This is more expensive but provides additional verification)
-            try {
-                console.log('   Verifying subscription vaults on blockchain...');
-                
-                for (const subscription of allSubscriptions) {
-                    if (subscription.vaultIdentifier) {
-                        // In a full implementation, we would check if the vault still exists
-                        // using the unique storage path
-                        subscription.blockchainVerified = true;
-                    }
+                } catch (vaultErr) {
+                    console.error(`   ❌ Error fetching vault ${vaultId}:`, vaultErr.message);
                 }
-            } catch (blockchainErr) {
-                console.warn('   Blockchain verification failed:', blockchainErr.message);
             }
             
-            // Sort by creation date (newest first)
-            allSubscriptions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            // Sort by vault ID (newest first, since IDs are incremental)
+            subscriptions.sort((a, b) => b.vaultId - a.vaultId);
             
-            console.log(`✅ Found ${allSubscriptions.length} REAL subscriptions with independent data`);
-            allSubscriptions.forEach((sub, index) => {
-                console.log(`   ${index + 1}. Vault ${sub.vaultId}: ${sub.litellmKey ? 'LiteLLM key active' : 'No LiteLLM key'}, Usage data: ${sub.usageData ? 'available' : 'unavailable'}`);
-            });
-            
-            return allSubscriptions;
+            console.log(`✅ Retrieved ${subscriptions.length} subscriptions from blockchain`);
+            return subscriptions;
             
         } catch (err) {
-            console.error('❌ Error fetching REAL user subscriptions:', err);
-            
-            // Fallback to basic local storage without real-time data
-            try {
-                const subscriptions = JSON.parse(localStorage.getItem('subscriptions') || '[]');
-                const userSubscriptions = subscriptions.filter(
-                    sub => sub.customer.toLowerCase() === userAddress.toLowerCase()
-                );
-                console.log(`⚠️ Fallback: Found ${userSubscriptions.length} basic local subscriptions`);
-                return userSubscriptions.map(sub => ({
-                    ...sub,
-                    usageData: null,
-                    source: 'fallback',
-                    independentData: false
-                }));
-            } catch (fallbackErr) {
-                console.error('❌ Fallback also failed:', fallbackErr);
-                throw err;
-            }
+            console.error('❌ Error fetching subscriptions from blockchain:', err);
+            throw err;
         }
     };
 
@@ -803,6 +795,7 @@ export const useUsageSubscription = () => {
         createSubscriptionVault,
         topUpSubscription,
         getVaultInfo,
+        getUserVaultIds,
         checkFlowBalance,
         checkVaultExists,
         getFDCStatus,
