@@ -1,6 +1,7 @@
 /**
- * LiteLLM API Key Management Service
+ * LiteLLM API Key Management Service - REAL DATA ONLY
  * Handles creation, management, and usage tracking for individual subscription keys
+ * NO MOCKED DATA - ALL REAL API CALLS
  */
 
 import axios from 'axios';
@@ -9,24 +10,35 @@ class LiteLLMKeyService {
     constructor() {
         this.baseURL = process.env.NEXT_PUBLIC_LITELLM_URL || 'https://llm.p10p.io';
         this.adminKey = process.env.NEXT_PUBLIC_LITELLM_ADMIN_KEY || 'sk-3iOmk5lK_YmNJnwCBPMXfQ';
+        
+        if (!this.baseURL || !this.adminKey) {
+            throw new Error('LiteLLM configuration missing - set NEXT_PUBLIC_LITELLM_URL and NEXT_PUBLIC_LITELLM_ADMIN_KEY');
+        }
     }
 
     /**
-     * Create a new LiteLLM API key for a subscription
+     * Create a new LiteLLM API key for a subscription - REAL API CALL
      */
     async createSubscriptionKey(vaultId, customerAddress, providerAddress) {
+        if (!vaultId || !customerAddress || !providerAddress) {
+            throw new Error('Missing required parameters for key creation');
+        }
+
         try {
+            console.log('🔑 Creating REAL LiteLLM API key for vault:', vaultId);
+            
             const keyData = {
-                key_name: `vault_${vaultId}_${customerAddress.slice(2, 8)}`,
+                key_name: `flareflow_vault_${vaultId}_${customerAddress.slice(2, 8)}`,
                 user_id: customerAddress,
                 metadata: {
                     vaultId: vaultId,
                     customer: customerAddress,
                     provider: providerAddress,
                     createdAt: new Date().toISOString(),
-                    type: 'subscription_key'
+                    type: 'flareflow_subscription',
+                    platform: 'FlareFlow.link'
                 },
-                max_budget: 100.0, // Default budget
+                max_budget: 100.0,
                 budget_duration: '30d',
                 models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet', 'llama-2-70b'],
                 permissions: {
@@ -36,117 +48,390 @@ class LiteLLMKeyService {
                 }
             };
 
-            // In production, this would call the actual LiteLLM API
-            // For demo, we'll simulate the key creation
-            const mockResponse = {
-                key: `sk-vault${vaultId}_${this.generateKeyId()}`,
-                key_name: keyData.key_name,
-                user_id: keyData.user_id,
-                metadata: keyData.metadata,
-                max_budget: keyData.max_budget,
-                budget_duration: keyData.budget_duration,
-                spend: 0,
-                created_at: new Date().toISOString()
-            };
+            const response = await axios.post(`${this.baseURL}/key/generate`, keyData, {
+                headers: {
+                    'Authorization': `Bearer ${this.adminKey}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000
+            });
 
-            console.log('🔑 Created LiteLLM key for vault:', vaultId);
-            console.log('   Key:', mockResponse.key);
+            if (!response.data || !response.data.key) {
+                throw new Error('Invalid response from LiteLLM API - no key returned');
+            }
+
+            console.log('✅ REAL LiteLLM key created successfully');
+            console.log('   Key ID:', response.data.key.slice(0, 20) + '...');
+            console.log('   Vault:', vaultId);
             console.log('   User:', customerAddress);
 
-            return mockResponse;
+            return response.data;
 
         } catch (error) {
-            console.error('Error creating LiteLLM key:', error);
-            throw new Error(`Failed to create LiteLLM key: ${error.message}`);
+            console.error('❌ REAL LiteLLM key creation failed:', error.message);
+            
+            if (error.response) {
+                console.error('   Status:', error.response.status);
+                console.error('   Data:', error.response.data);
+                throw new Error(`LiteLLM API Error ${error.response.status}: ${error.response.data?.error || error.response.statusText}`);
+            }
+            
+            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+                throw new Error(`Cannot connect to LiteLLM at ${this.baseURL} - check URL and network connectivity`);
+            }
+            
+            throw new Error(`LiteLLM key creation failed: ${error.message}`);
         }
     }
 
     /**
-     * Get usage data for a specific LiteLLM key
+     * Get usage data for a specific LiteLLM key - REAL API CALL ONLY
      */
     async getKeyUsage(apiKey, startDate = null, endDate = null) {
+        if (!apiKey) {
+            throw new Error('API key is required for usage data');
+        }
+
         try {
-            const params = {
-                api_key: apiKey
+            console.log(`📊 Fetching REAL usage data for key ${apiKey.slice(0, 20)}...`);
+            
+            const params = new URLSearchParams();
+            if (apiKey) params.append('api_key', apiKey);
+            if (startDate) params.append('start_date', startDate);
+            if (endDate) params.append('end_date', endDate);
+
+            // Try multiple possible LiteLLM endpoints for usage data
+            const endpoints = [
+                '/spend/logs',
+                '/usage/logs', 
+                '/key/usage',
+                '/api/usage'
+            ];
+
+            let usageData = null;
+            let lastError = null;
+
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`   Trying endpoint: ${this.baseURL}${endpoint}`);
+                    
+                    const response = await axios.get(`${this.baseURL}${endpoint}?${params.toString()}`, {
+                        headers: {
+                            'Authorization': `Bearer ${this.adminKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 15000
+                    });
+
+                    if (response.data) {
+                        console.log(`✅ Found usage data at ${endpoint}`);
+                        usageData = this.processRealUsageData(response.data, apiKey);
+                        break;
+                    }
+                } catch (endpointError) {
+                    console.log(`   Endpoint ${endpoint} failed:`, endpointError.response?.status || endpointError.message);
+                    lastError = endpointError;
+                    continue;
+                }
+            }
+
+            if (!usageData) {
+                console.error('❌ No usage data found from any LiteLLM endpoint');
+                throw new Error(`No usage data available for key ${apiKey.slice(0, 20)}... - tried all endpoints: ${endpoints.join(', ')}`);
+            }
+
+            console.log('✅ REAL usage data retrieved successfully');
+            return usageData;
+
+        } catch (error) {
+            console.error('❌ Failed to fetch REAL usage data:', error.message);
+            
+            if (error.response) {
+                console.error('   Status:', error.response.status);
+                console.error('   Data:', error.response.data);
+            }
+            
+            throw new Error(`Failed to fetch real usage data: ${error.message}`);
+        }
+    }
+
+    /**
+     * Process real usage data from LiteLLM API - NO MOCK DATA
+     */
+    processRealUsageData(rawData, apiKey) {
+        console.log('🔄 Processing REAL usage data (no mocking)');
+        
+        try {
+            // Handle different possible response formats from LiteLLM
+            let usageRecords = [];
+            
+            if (Array.isArray(rawData)) {
+                usageRecords = rawData;
+            } else if (rawData.data && Array.isArray(rawData.data)) {
+                usageRecords = rawData.data;
+            } else if (rawData.logs && Array.isArray(rawData.logs)) {
+                usageRecords = rawData.logs;
+            } else if (rawData.usage && Array.isArray(rawData.usage)) {
+                usageRecords = rawData.usage;
+            } else {
+                console.log('   Unexpected data format, treating as single record');
+                usageRecords = [rawData];
+            }
+
+            // Process real usage records
+            const processedData = {
+                key: apiKey,
+                usage_summary: {
+                    total_requests: 0,
+                    total_tokens: 0,
+                    total_cost: 0,
+                    period_start: null,
+                    period_end: null
+                },
+                model_breakdown: {},
+                daily_usage: {},
+                recent_requests: []
             };
 
-            if (startDate) params.start_date = startDate;
-            if (endDate) params.end_date = endDate;
+            let earliestDate = null;
+            let latestDate = null;
 
-            // For demo, return mock usage data based on the key
-            const vaultId = this.extractVaultIdFromKey(apiKey);
-            const mockUsageData = this.generateMockUsageData(vaultId, apiKey);
+            usageRecords.forEach(record => {
+                // Extract common fields with different possible names
+                const requests = record.requests || record.request_count || 1;
+                const tokens = record.tokens || record.token_count || record.total_tokens || 0;
+                const cost = parseFloat(record.cost || record.total_cost || record.spend || 0);
+                const model = record.model || record.model_name || 'unknown';
+                const timestamp = record.timestamp || record.created_at || record.time || new Date().toISOString();
+                
+                // Update totals
+                processedData.usage_summary.total_requests += requests;
+                processedData.usage_summary.total_tokens += tokens;
+                processedData.usage_summary.total_cost += cost;
 
-            console.log(`📊 Fetched usage for key ${apiKey.slice(0, 20)}...`);
+                // Track date range
+                const recordDate = new Date(timestamp);
+                if (!earliestDate || recordDate < earliestDate) earliestDate = recordDate;
+                if (!latestDate || recordDate > latestDate) latestDate = recordDate;
+
+                // Model breakdown
+                if (!processedData.model_breakdown[model]) {
+                    processedData.model_breakdown[model] = {
+                        requests: 0,
+                        tokens: 0,
+                        cost: 0
+                    };
+                }
+                processedData.model_breakdown[model].requests += requests;
+                processedData.model_breakdown[model].tokens += tokens;
+                processedData.model_breakdown[model].cost += cost;
+
+                // Daily usage aggregation
+                const dateKey = recordDate.toISOString().split('T')[0];
+                if (!processedData.daily_usage[dateKey]) {
+                    processedData.daily_usage[dateKey] = {
+                        date: dateKey,
+                        requests: 0,
+                        tokens: 0,
+                        cost: 0
+                    };
+                }
+                processedData.daily_usage[dateKey].requests += requests;
+                processedData.daily_usage[dateKey].tokens += tokens;
+                processedData.daily_usage[dateKey].cost += cost;
+
+                // Recent requests (keep last 20)
+                processedData.recent_requests.push({
+                    id: record.id || record.request_id || `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    timestamp: timestamp,
+                    model: model,
+                    tokens: tokens,
+                    cost: cost.toFixed(6),
+                    status: record.status || 'completed'
+                });
+            });
+
+            // Set date range
+            processedData.usage_summary.period_start = earliestDate ? earliestDate.toISOString() : new Date().toISOString();
+            processedData.usage_summary.period_end = latestDate ? latestDate.toISOString() : new Date().toISOString();
+
+            // Convert daily usage object to sorted array
+            processedData.daily_usage = Object.values(processedData.daily_usage)
+                .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // Sort recent requests by timestamp (newest first) and limit to 20
+            processedData.recent_requests = processedData.recent_requests
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                .slice(0, 20);
+
+            // Fix cost formatting
+            processedData.usage_summary.total_cost = parseFloat(processedData.usage_summary.total_cost.toFixed(6));
+            Object.keys(processedData.model_breakdown).forEach(model => {
+                processedData.model_breakdown[model].cost = parseFloat(processedData.model_breakdown[model].cost.toFixed(6));
+            });
+            processedData.daily_usage.forEach(day => {
+                day.cost = parseFloat(day.cost.toFixed(6));
+            });
+
+            console.log('✅ REAL usage data processed successfully');
+            console.log(`   Total requests: ${processedData.usage_summary.total_requests}`);
+            console.log(`   Total cost: $${processedData.usage_summary.total_cost}`);
+            console.log(`   Models used: ${Object.keys(processedData.model_breakdown).join(', ')}`);
             
-            return mockUsageData;
+            return processedData;
 
         } catch (error) {
-            console.error('Error fetching key usage:', error);
-            throw new Error(`Failed to fetch usage data: ${error.message}`);
+            console.error('❌ Error processing REAL usage data:', error.message);
+            throw new Error(`Failed to process real usage data: ${error.message}`);
         }
     }
 
     /**
-     * List all keys for a user
+     * List all keys for a user - REAL API CALL ONLY
      */
     async getUserKeys(userAddress) {
+        if (!userAddress) {
+            throw new Error('User address is required');
+        }
+
         try {
-            // In production, this would query the LiteLLM API
-            // For demo, return mock keys based on stored subscriptions
-            const mockKeys = this.getMockKeysForUser(userAddress);
+            console.log(`🗂️ Fetching REAL keys for user ${userAddress}`);
             
-            console.log(`🗂️  Found ${mockKeys.length} keys for user ${userAddress}`);
+            const response = await axios.get(`${this.baseURL}/key/list`, {
+                headers: {
+                    'Authorization': `Bearer ${this.adminKey}`,
+                    'Content-Type': 'application/json'
+                },
+                params: {
+                    user_id: userAddress
+                },
+                timeout: 15000
+            });
+
+            if (!response.data) {
+                console.log('   No keys found for user');
+                return [];
+            }
+
+            const keys = Array.isArray(response.data) ? response.data : response.data.keys || [];
+            console.log(`✅ Found ${keys.length} REAL keys for user ${userAddress}`);
             
-            return mockKeys;
+            return keys;
 
         } catch (error) {
-            console.error('Error fetching user keys:', error);
-            throw new Error(`Failed to fetch user keys: ${error.message}`);
+            console.error('❌ Failed to fetch REAL user keys:', error.message);
+            
+            if (error.response?.status === 404) {
+                console.log('   No keys found for user (404)');
+                return [];
+            }
+            
+            if (error.response) {
+                console.error('   Status:', error.response.status);
+                console.error('   Data:', error.response.data);
+                throw new Error(`LiteLLM API Error ${error.response.status}: ${error.response.data?.error || error.response.statusText}`);
+            }
+            
+            throw new Error(`Failed to fetch real user keys: ${error.message}`);
         }
     }
 
     /**
-     * Update key permissions or budget
+     * Update key permissions or budget - REAL API CALL ONLY
      */
     async updateKey(apiKey, updates) {
+        if (!apiKey || !updates) {
+            throw new Error('API key and updates are required');
+        }
+
         try {
-            console.log(`🔧 Updating key ${apiKey.slice(0, 20)}... with:`, updates);
+            console.log(`🔧 Updating REAL key ${apiKey.slice(0, 20)}... with:`, updates);
             
-            // For demo, return updated key data
+            const response = await axios.patch(`${this.baseURL}/key/update`, {
+                key: apiKey,
+                ...updates
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${this.adminKey}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 15000
+            });
+
+            if (!response.data) {
+                throw new Error('Invalid response from LiteLLM API - no data returned');
+            }
+
+            console.log('✅ REAL key updated successfully');
             return {
                 success: true,
                 key: apiKey,
                 updates: updates,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                response_data: response.data
             };
 
         } catch (error) {
-            console.error('Error updating key:', error);
-            throw new Error(`Failed to update key: ${error.message}`);
+            console.error('❌ Failed to update REAL key:', error.message);
+            
+            if (error.response) {
+                console.error('   Status:', error.response.status);
+                console.error('   Data:', error.response.data);
+                throw new Error(`LiteLLM API Error ${error.response.status}: ${error.response.data?.error || error.response.statusText}`);
+            }
+            
+            throw new Error(`Failed to update real key: ${error.message}`);
         }
     }
 
     /**
-     * Revoke/delete a key
+     * Revoke/delete a key - REAL API CALL ONLY
      */
     async revokeKey(apiKey) {
+        if (!apiKey) {
+            throw new Error('API key is required for revocation');
+        }
+
         try {
-            console.log(`🗑️  Revoking key ${apiKey.slice(0, 20)}...`);
+            console.log(`🗑️ Revoking REAL key ${apiKey.slice(0, 20)}...`);
             
+            const response = await axios.delete(`${this.baseURL}/key/delete`, {
+                headers: {
+                    'Authorization': `Bearer ${this.adminKey}`,
+                    'Content-Type': 'application/json'
+                },
+                data: {
+                    key: apiKey
+                },
+                timeout: 15000
+            });
+
+            if (!response.data) {
+                throw new Error('Invalid response from LiteLLM API - no confirmation returned');
+            }
+
+            console.log('✅ REAL key revoked successfully');
             return {
                 success: true,
                 key: apiKey,
-                revoked_at: new Date().toISOString()
+                revoked_at: new Date().toISOString(),
+                response_data: response.data
             };
 
         } catch (error) {
-            console.error('Error revoking key:', error);
-            throw new Error(`Failed to revoke key: ${error.message}`);
+            console.error('❌ Failed to revoke REAL key:', error.message);
+            
+            if (error.response) {
+                console.error('   Status:', error.response.status);
+                console.error('   Data:', error.response.data);
+                throw new Error(`LiteLLM API Error ${error.response.status}: ${error.response.data?.error || error.response.statusText}`);
+            }
+            
+            throw new Error(`Failed to revoke real key: ${error.message}`);
         }
     }
 
-    // Helper methods
+    // Helper methods for real data processing
 
     generateKeyId() {
         return Math.random().toString(36).substring(2, 15) + 
@@ -155,99 +440,7 @@ class LiteLLMKeyService {
 
     extractVaultIdFromKey(apiKey) {
         const match = apiKey.match(/vault(\d+)/);
-        return match ? parseInt(match[1]) : Math.floor(Math.random() * 1000000);
-    }
-
-    generateMockUsageData(vaultId, apiKey) {
-        // Generate realistic mock data based on vault ID
-        const daysSinceCreation = Math.floor((Date.now() - new Date('2024-01-01').getTime()) / (1000 * 60 * 60 * 24));
-        const baseUsage = vaultId % 100;
-        
-        return {
-            key: apiKey,
-            vault_id: vaultId,
-            usage_summary: {
-                total_requests: baseUsage + Math.floor(Math.random() * 50),
-                total_tokens: (baseUsage + Math.floor(Math.random() * 50)) * 847,
-                total_cost: ((baseUsage + Math.floor(Math.random() * 50)) * 0.0015).toFixed(6),
-                period_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-                period_end: new Date().toISOString()
-            },
-            model_breakdown: {
-                'gpt-3.5-turbo': {
-                    requests: Math.floor(baseUsage * 0.6),
-                    tokens: Math.floor((baseUsage * 0.6) * 423),
-                    cost: (Math.floor(baseUsage * 0.6) * 0.0008).toFixed(6)
-                },
-                'gpt-4': {
-                    requests: Math.floor(baseUsage * 0.3),
-                    tokens: Math.floor((baseUsage * 0.3) * 1247),
-                    cost: (Math.floor(baseUsage * 0.3) * 0.012).toFixed(6)
-                },
-                'claude-3-sonnet': {
-                    requests: Math.floor(baseUsage * 0.1),
-                    tokens: Math.floor((baseUsage * 0.1) * 892),
-                    cost: (Math.floor(baseUsage * 0.1) * 0.003).toFixed(6)
-                }
-            },
-            daily_usage: this.generateDailyUsage(30, baseUsage),
-            recent_requests: this.generateRecentRequests(vaultId, 10)
-        };
-    }
-
-    generateDailyUsage(days, baseUsage) {
-        const dailyData = [];
-        for (let i = days - 1; i >= 0; i--) {
-            const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-            const dailyRequests = Math.floor(Math.random() * (baseUsage / 7)) + 1;
-            dailyData.push({
-                date: date.toISOString().split('T')[0],
-                requests: dailyRequests,
-                tokens: dailyRequests * (400 + Math.floor(Math.random() * 800)),
-                cost: (dailyRequests * (0.001 + Math.random() * 0.005)).toFixed(6)
-            });
-        }
-        return dailyData;
-    }
-
-    generateRecentRequests(vaultId, count) {
-        const requests = [];
-        for (let i = 0; i < count; i++) {
-            const timestamp = new Date(Date.now() - i * 60 * 60 * 1000 * Math.random() * 24);
-            requests.push({
-                id: `req_${vaultId}_${i + 1}`,
-                timestamp: timestamp.toISOString(),
-                model: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet'][Math.floor(Math.random() * 3)],
-                tokens: 200 + Math.floor(Math.random() * 1000),
-                cost: (0.001 + Math.random() * 0.01).toFixed(6),
-                status: 'completed'
-            });
-        }
-        return requests.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    }
-
-    getMockKeysForUser(userAddress) {
-        // This would typically query a database or the LiteLLM API
-        // For demo, generate some mock keys based on user address
-        const userHash = userAddress.slice(2, 8);
-        const keyCount = (parseInt(userHash, 16) % 3) + 1; // 1-3 keys per user
-        
-        const keys = [];
-        for (let i = 0; i < keyCount; i++) {
-            const vaultId = parseInt(userHash + i.toString(), 16) % 1000000;
-            keys.push({
-                key: `sk-vault${vaultId}_${this.generateKeyId()}`,
-                key_name: `vault_${vaultId}_${userHash}`,
-                vault_id: vaultId,
-                user_id: userAddress,
-                created_at: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-                max_budget: 100.0,
-                current_spend: (Math.random() * 25).toFixed(2),
-                status: 'active'
-            });
-        }
-        
-        return keys;
+        return match ? parseInt(match[1]) : null;
     }
 }
 
