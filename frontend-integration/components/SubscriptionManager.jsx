@@ -5,6 +5,7 @@ import { TX_STATUS } from '../config/flowConfig';
 import StorageChecker from './StorageChecker';
 import SubscriptionTile from './SubscriptionTile';
 import AdminPricingControls from './AdminPricingControls';
+import TransactionSuccessModal from './TransactionSuccessModal';
 
 const SubscriptionManager = () => {
     const {
@@ -30,6 +31,8 @@ const SubscriptionManager = () => {
     const [activeTab, setActiveTab] = useState('subscriptions');
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [selectedSubscription, setSelectedSubscription] = useState(null);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+    const [successTransactionData, setSuccessTransactionData] = useState(null);
 
     // Subscribe to user authentication
     useEffect(() => {
@@ -69,16 +72,30 @@ const SubscriptionManager = () => {
             return;
         }
 
+        // Check if user has sufficient balance
+        const requiredAmount = parseFloat(depositAmount);
+        if (flowBalance !== null && flowBalance < requiredAmount) {
+            alert(`Insufficient FLOW balance!\n\nRequired: ${requiredAmount} FLOW\nAvailable: ${flowBalance.toFixed(4)} FLOW\n\nPlease add more FLOW tokens to your wallet.`);
+            return;
+        }
+
         const result = await createSubscriptionVault(
             providerAddress, 
-            parseFloat(depositAmount),
+            requiredAmount,
             user.addr
         );
         
         if (result.success) {
-            alert(`✅ Subscription created!\n\nVault ID: ${result.vaultId}\nLiteLLM Key: ${result.litellmKey.slice(0, 20)}...\n\nView transaction: ${result.explorerUrl}`);
-            await loadUserData(); // Refresh subscriptions
+            // Show confetti and modal instead of alert
+            setSuccessTransactionData({
+                ...result,
+                amount: requiredAmount
+            });
+            setShowSuccessModal(true);
+            await loadUserData(); // Refresh subscriptions and balance
             setShowCreateForm(false);
+        } else {
+            alert(`❌ Subscription creation failed:\n\n${result.error}`);
         }
     };
 
@@ -136,7 +153,14 @@ const SubscriptionManager = () => {
             const result = await topUpSubscription(amount, subscription.vaultIdentifier, subscription.vaultId);
             
             if (result.success) {
-                alert(`✅ Top-up successful!\n\nAdded ${amount} FLOW to vault ${subscription.vaultId}\nFunded from your connected wallet\n\nView transaction: ${result.explorerUrl}`);
+                // Show confetti and modal for successful top-up
+                setSuccessTransactionData({
+                    ...result,
+                    litellmKey: subscription.litellmKey, // Include existing API key
+                    isTopUp: true,
+                    subscription: subscription
+                });
+                setShowSuccessModal(true);
                 await loadUserData(); // Refresh subscriptions and balance
             } else {
                 alert(`❌ Top-up failed:\n\n${result.error}`);
@@ -490,6 +514,16 @@ print(response.choices[0].message.content)`}
                     <strong>❌ Error:</strong> {error}
                 </div>
             )}
+
+            {/* Transaction Success Modal */}
+            <TransactionSuccessModal 
+                isOpen={showSuccessModal}
+                onClose={() => {
+                    setShowSuccessModal(false);
+                    setSuccessTransactionData(null);
+                }}
+                transactionData={successTransactionData}
+            />
 
             <style jsx>{`
                 .subscription-manager {
