@@ -229,14 +229,22 @@ access(all) contract UsageBasedSubscriptions {
             // Apply volume discount
             calculatedPrice = calculatedPrice * (1.0 - self.currentTier.discountRate)
             
-            // Apply model-specific multipliers
+            // Apply model-specific multipliers based on selected models
             var modelMultiplier = 1.0
+            var modelCount = 0
+            
             for model in usage.models.keys {
-                if model == "gpt-4" || model == "claude-3-opus" {
-                    modelMultiplier = 1.5  // Premium models cost more
-                } else if model == "gpt-3.5-turbo" || model == "claude-3-haiku" {
-                    modelMultiplier = 0.8  // Cheaper models
+                // Only apply pricing for selected models
+                if self.selectedModels.contains(model) {
+                    let multiplier = self.modelPricing[model] ?? 1.0
+                    modelMultiplier = modelMultiplier + multiplier
+                    modelCount = modelCount + 1
                 }
+            }
+            
+            // Average the multipliers if multiple models were used
+            if modelCount > 0 {
+                modelMultiplier = modelMultiplier / UFix64(modelCount)
             }
             
             self.usageMultiplier = modelMultiplier
@@ -409,6 +417,25 @@ access(all) contract UsageBasedSubscriptions {
             self.autoPay = true
             self.maxMonthlySpend = 1000.0
             
+            // Initialize selected models and pricing
+            self.selectedModels = selectedModels
+            self.modelPricing = {}
+            
+            // Validate model selection (max 3 models)
+            assert(self.selectedModels.length > 0, message: "At least 1 model must be selected")
+            assert(self.selectedModels.length <= 3, message: "Maximum 3 models allowed per subscription")
+            
+            // Set up model-specific pricing overrides
+            for model in self.selectedModels {
+                if model == "gpt-4" || model == "claude-3-opus" {
+                    self.modelPricing[model] = 1.5  // Premium models cost 50% more
+                } else if model == "gpt-3.5-turbo" || model == "claude-3-haiku" {
+                    self.modelPricing[model] = 0.8  // Budget models cost 20% less
+                } else {
+                    self.modelPricing[model] = 1.0  // Standard pricing
+                }
+            }
+            
             UsageBasedSubscriptions.vaultRegistry[self.id] = owner
         }
     }
@@ -506,7 +533,8 @@ access(all) contract UsageBasedSubscriptions {
         initialDeposit: @{FungibleToken.Vault},
         entitlementType: EntitlementType,
         initialWithdrawLimit: UFix64,
-        validityPeriod: UFix64
+        validityPeriod: UFix64,
+        selectedModels: [String]
     ): UInt64 {
         let vault <- create SubscriptionVault(
             owner: owner,
@@ -515,7 +543,8 @@ access(all) contract UsageBasedSubscriptions {
             vault: <- initialDeposit,
             entitlementType: entitlementType,
             initialWithdrawLimit: initialWithdrawLimit,
-            validityPeriod: validityPeriod
+            validityPeriod: validityPeriod,
+            selectedModels: selectedModels
         )
         
         let vaultId = vault.id

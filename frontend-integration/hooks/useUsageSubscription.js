@@ -16,7 +16,8 @@ transaction(
     entitlementType: String,
     withdrawLimit: UFix64,
     expirationAmount: UInt64,
-    expirationUnit: String
+    expirationUnit: String,
+    selectedModels: [String]
 ) {
     
     let vault: @FlowToken.Vault
@@ -56,7 +57,8 @@ transaction(
             initialDeposit: <- self.vault,
             entitlementType: entitlementTypeEnum,
             initialWithdrawLimit: withdrawLimit,
-            validityPeriod: validityPeriod
+            validityPeriod: validityPeriod,
+            selectedModels: selectedModels
         )
         
         log("✅ Subscription created with entitlement settings!")
@@ -284,14 +286,14 @@ export const useUsageSubscription = () => {
 
     // Create usage-based subscription vault with LiteLLM key - REAL BLOCKCHAIN TRANSACTION
     // 1 User -> Many Subscriptions -> 1 Subscription -> 1 LiteLLM Key -> Independent Usage Data
-    const createSubscriptionVault = async (providerAddress, initialDepositAmount, entitlementType, withdrawLimit, expirationAmount, expirationUnit, customerAddress) => {
+    const createSubscriptionVault = async (providerAddress, initialDepositAmount, entitlementType, withdrawLimit, expirationAmount, expirationUnit, selectedModels) => {
         setIsLoading(true);
         setError(null);
         setTxStatus(TX_STATUS.PENDING);
         setTxDetails(null);
 
         try {
-            const userAddress = customerAddress || fcl.currentUser().addr;
+            const userAddress = fcl.currentUser().addr;
             if (!userAddress) {
                 throw new Error('User must be connected to create subscription');
             }
@@ -320,6 +322,9 @@ export const useUsageSubscription = () => {
             console.log(`   Withdraw limit: ${withdrawLimit} FLOW`);
             console.log(`   Expiration: ${expirationAmount} ${expirationUnit}`);
             
+            // Convert selectedModels to array of model IDs
+            const modelIds = selectedModels.map(model => model.id || model);
+            
             const txId = await fcl.mutate({
                 cadence: CREATE_SUBSCRIPTION_WITH_ENTITLEMENT_TRANSACTION,
                 args: (arg, t) => [
@@ -328,7 +333,8 @@ export const useUsageSubscription = () => {
                     arg(entitlementType, t.String),
                     arg(withdrawLimit.toFixed(8), t.UFix64),
                     arg(expirationAmount, t.UInt64),
-                    arg(expirationUnit, t.String)
+                    arg(expirationUnit, t.String),
+                    arg(modelIds, t.Array(t.String))
                 ],
                 limit: 9999,
                 proposer: fcl.authz,

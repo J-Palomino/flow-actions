@@ -20,7 +20,7 @@ class LiteLLMKeyService {
      * Create a new LiteLLM API key for a subscription - REAL API CALL
      * Ensures 1 Subscription -> 1 Unique LiteLLM Key -> Independent Usage Tracking
      */
-    async createSubscriptionKey(vaultId, customerAddress, providerAddress) {
+    async createSubscriptionKey(vaultId, customerAddress, providerAddress, selectedModels = []) {
         if (!vaultId || !customerAddress || !providerAddress) {
             throw new Error('Missing required parameters for key creation');
         }
@@ -49,7 +49,8 @@ class LiteLLMKeyService {
                 },
                 max_budget: 100.0,
                 budget_duration: '30d',
-                models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet', 'llama-2-70b', 'gpt-4-turbo'],
+                // Use selected models or fallback to default set
+                models: selectedModels.length > 0 ? selectedModels.map(m => m.id || m) : ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet'],
                 permissions: {
                     chat_completions: true,
                     embeddings: true,
@@ -64,6 +65,7 @@ class LiteLLMKeyService {
             };
 
             console.log(`   Creating key with unique name: ${uniqueKeyName}`);
+            console.log(`   Restricted to ${keyData.models.length} selected models: ${keyData.models.join(', ')}`);
             console.log(`   Independent user ID: ${keyData.user_id}`);
 
             const response = await axios.post(`${this.baseURL}/key/generate`, keyData, {
