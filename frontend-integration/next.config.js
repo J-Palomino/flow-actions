@@ -2,6 +2,14 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  // Optimize build performance
+  experimental: {
+    optimizeCss: false, // Disable CSS optimization that can cause hangs
+  },
+  // Build optimization
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production', // Remove console logs in production
+  },
   // Enable webpack 5 features
   webpack: (config, { isServer }) => {
     // Fix for FCL and Flow SDK
@@ -14,6 +22,16 @@ const nextConfig = {
         crypto: false,
       };
     }
+    
+    // Optimize build performance
+    config.optimization = {
+      ...config.optimization,
+      splitChunks: {
+        chunks: 'all',
+        maxSize: 240000, // Limit chunk size to prevent memory issues
+      },
+    };
+    
     return config;
   },
 }

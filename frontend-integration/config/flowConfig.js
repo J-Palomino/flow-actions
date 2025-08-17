@@ -7,7 +7,10 @@ const getFlowEnvironment = () => {
 };
 
 const FLOW_ENV = getFlowEnvironment();
-console.log('🌊 Flow Environment detected:', FLOW_ENV);
+// Only log in development mode to prevent build hangs
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('🌊 Flow Environment detected:', FLOW_ENV);
+}
 
 // Mainnet-only configuration for Dynamic/Privy wallet integration
 const FLOW_CONFIGS = {
@@ -34,13 +37,14 @@ try {
     .put('app.detail.icon', currentConfig['app.detail.icon'])
     .put('flow.network', currentConfig['flow.network']);
   
-  console.log('✅ FCL configured successfully for MAINNET (Dynamic/Privy ready)');
+  // Only log in development mode to prevent build hangs
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    console.log('✅ FCL configured successfully for MAINNET (Dynamic/Privy ready)');
+    console.log('🌊 FCL Configuration:', currentConfig);
+  }
 } catch (error) {
   console.error('❌ FCL configuration error:', error);
 }
-
-// Debug FCL configuration
-console.log('🌊 FCL Configuration:', currentConfig);
 
 // Real mainnet contract addresses only
 const CONTRACT_ADDRESSES = {
@@ -56,15 +60,15 @@ const CONTRACT_ADDRESSES = {
     }
 };
 
-// Debug contract addresses
-console.log('🔧 Environment contracts:', CONTRACT_ADDRESSES[FLOW_ENV]);
-
-// FCL Health Check
-console.log('🏥 FCL Health Check:');
-console.log('  - FCL object:', typeof fcl);
-console.log('  - FCL.config:', typeof fcl.config);
-console.log('  - FCL.authenticate:', typeof fcl.authenticate);
-console.log('  - FCL.currentUser:', typeof fcl.currentUser);
+// Debug contract addresses and FCL health check only in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔧 Environment contracts:', CONTRACT_ADDRESSES[FLOW_ENV]);
+  console.log('🏥 FCL Health Check:');
+  console.log('  - FCL object:', typeof fcl);
+  console.log('  - FCL.config:', typeof fcl.config);
+  console.log('  - FCL.authenticate:', typeof fcl.authenticate);
+  console.log('  - FCL.currentUser:', typeof fcl.currentUser);
+}
 
 // Export contracts for current environment
 export const CONTRACTS = CONTRACT_ADDRESSES[FLOW_ENV];

@@ -116,7 +116,7 @@ const SubscriptionManager = () => {
         const result = await createSubscriptionVault(
             providerAddress, 
             requiredAmount,
-            user.addr
+            flowUser.addr
         );
         
         if (result.success) {
@@ -156,7 +156,7 @@ const SubscriptionManager = () => {
     };
 
     const handleTopUpSubscription = async (subscription) => {
-        if (!user?.addr) {
+        if (!flowUser?.addr) {
             alert('Please connect your wallet first');
             return;
         }
@@ -309,7 +309,7 @@ const SubscriptionManager = () => {
                 >
                     📚 API Usage Guide
                 </button>
-                {user?.addr === '0x6daee039a7b9c2f0' && (
+                {flowUser?.addr === '0x6daee039a7b9c2f0' && (
                     <button 
                         onClick={() => setActiveTab('admin')}
                         className={`tab-button admin-tab ${activeTab === 'admin' ? 'active' : ''}`}
@@ -368,7 +368,7 @@ const SubscriptionManager = () => {
                         <h2>🆕 Create FlareFlow.link Subscription</h2>
                         <p>Create a Flow blockchain subscription with Flare oracle monitoring and automatic LiteLLM API key generation</p>
                         
-                        {user?.addr && <StorageChecker userAddress={user.addr} />}
+                        {flowUser?.addr && <StorageChecker userAddress={flowUser.addr} />}
                         
                         <div className="create-form">
                             <div className="form-group">
@@ -399,7 +399,7 @@ const SubscriptionManager = () => {
 
                             <button
                                 onClick={handleCreateSubscription}
-                                disabled={isLoading || !user?.addr}
+                                disabled={isLoading || !flowUser?.addr}
                                 className="create-button"
                             >
                                 {isLoading ? '⏳ Creating...' : '🚀 Create Subscription & API Key'}
@@ -535,7 +535,7 @@ print(response.choices[0].message.content)`}
 
                 {activeTab === 'admin' && (
                     <AdminPricingControls 
-                        account={user?.addr}
+                        account={flowUser?.addr}
                         onPricingUpdate={(config) => {
                             console.log('Admin pricing updated:', config);
                             // Refresh data if needed
