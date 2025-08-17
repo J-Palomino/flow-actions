@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./flow-cli.exe scripts execute:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
