@@ -70,6 +70,12 @@ access(all) contract UsageBasedSubscriptions {
         }
     }
     
+    /// Entitlement types
+    access(all) enum EntitlementType: UInt8 {
+        access(all) case fixed      // Fixed withdrawal limit set by user
+        access(all) case dynamic    // Grows with usage as long as vault is funded
+    }
+    
     /// Dynamic entitlement for automated withdrawals
     access(all) struct Entitlement {
         access(all) let vaultId: UInt64
@@ -78,9 +84,18 @@ access(all) contract UsageBasedSubscriptions {
         access(all) var validUntil: UFix64      // Expiration timestamp
         access(all) var lastUpdate: UFix64      // Last FDC update
         access(all) var isActive: Bool
+        access(all) let entitlementType: EntitlementType  // Fixed or Dynamic
+        access(all) let fixedLimit: UFix64      // Original fixed limit (if fixed type)
         
         access(all) fun updateLimit(newLimit: UFix64, validityPeriod: UFix64) {
-            self.withdrawLimit = newLimit
+            // For fixed entitlements, never exceed the original fixed limit
+            if self.entitlementType == EntitlementType.fixed {
+                self.withdrawLimit = newLimit > self.fixedLimit ? self.fixedLimit : newLimit
+            } else {
+                // Dynamic entitlements can grow with usage
+                self.withdrawLimit = newLimit
+            }
+            
             self.validUntil = getCurrentBlock().timestamp + validityPeriod
             self.lastUpdate = getCurrentBlock().timestamp
         }
@@ -98,11 +113,13 @@ access(all) contract UsageBasedSubscriptions {
                 : 0.0
         }
         
-        init(vaultId: UInt64) {
+        init(vaultId: UInt64, entitlementType: EntitlementType, initialLimit: UFix64, validityPeriod: UFix64) {
             self.vaultId = vaultId
-            self.withdrawLimit = 0.0
+            self.entitlementType = entitlementType
+            self.fixedLimit = entitlementType == EntitlementType.fixed ? initialLimit : 0.0
+            self.withdrawLimit = initialLimit
             self.usedAmount = 0.0
-            self.validUntil = 0.0
+            self.validUntil = getCurrentBlock().timestamp + validityPeriod
             self.lastUpdate = getCurrentBlock().timestamp
             self.isActive = true
         }
@@ -258,7 +275,10 @@ access(all) contract UsageBasedSubscriptions {
             owner: Address,
             provider: Address,
             serviceName: String,
-            vault: @{FungibleToken.Vault}
+            vault: @{FungibleToken.Vault},
+            entitlementType: EntitlementType,
+            initialWithdrawLimit: UFix64,
+            validityPeriod: UFix64
         ) {
             self.id = UsageBasedSubscriptions.totalVaults
             UsageBasedSubscriptions.totalVaults = UsageBasedSubscriptions.totalVaults + 1
@@ -276,7 +296,13 @@ access(all) contract UsageBasedSubscriptions {
             self.usageMultiplier = 1.0
             self.currentPrice = 10.0
             
-            self.entitlement = Entitlement(vaultId: self.id)
+            // Create entitlement with user-specified settings
+            self.entitlement = Entitlement(
+                vaultId: self.id,
+                entitlementType: entitlementType,
+                initialLimit: initialWithdrawLimit,
+                validityPeriod: validityPeriod
+            )
             
             self.autoPay = true
             self.maxMonthlySpend = 1000.0
@@ -370,18 +396,24 @@ access(all) contract UsageBasedSubscriptions {
     
     /// Public functions
     
-    /// Create a new subscription vault
+    /// Create a new subscription vault with entitlement settings
     access(all) fun createSubscriptionVault(
         owner: Address,
         provider: Address,
         serviceName: String,
-        initialDeposit: @{FungibleToken.Vault}
+        initialDeposit: @{FungibleToken.Vault},
+        entitlementType: EntitlementType,
+        initialWithdrawLimit: UFix64,
+        validityPeriod: UFix64
     ): UInt64 {
         let vault <- create SubscriptionVault(
             owner: owner,
             provider: provider,
             serviceName: serviceName,
-            vault: <- initialDeposit
+            vault: <- initialDeposit,
+            entitlementType: entitlementType,
+            initialWithdrawLimit: initialWithdrawLimit,
+            validityPeriod: validityPeriod
         )
         
         let vaultId = vault.id
@@ -427,6 +459,20 @@ access(all) contract UsageBasedSubscriptions {
     /// Get default tier
     access(all) fun getDefaultTier(): PricingTier {
         return PricingTier(name: "Starter", minUsage: 0, maxUsage: 100000, pricePerUnit: 0.02, discountRate: 0.0)
+    }
+    
+    /// Helper function to convert time periods to seconds
+    access(all) fun convertToSeconds(amount: UInt64, unit: String): UFix64 {
+        switch unit {
+            case "hours":
+                return UFix64(amount) * 3600.0
+            case "days":
+                return UFix64(amount) * 86400.0
+            case "months":
+                return UFix64(amount) * 2592000.0  // 30 days
+            default:
+                return UFix64(amount) * 86400.0    // Default to days
+        }
     }
     
     /// Create service provider
