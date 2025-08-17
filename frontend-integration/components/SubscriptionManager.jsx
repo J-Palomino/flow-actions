@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useDynamicFlow } from '../hooks/useDynamicFlow';
+import * as fcl from '@onflow/fcl';
 import { useUsageSubscription } from '../hooks/useUsageSubscription';
 import { TX_STATUS } from '../config/flowConfig';
 import StorageChecker from './StorageChecker';
@@ -22,15 +22,8 @@ const SubscriptionManager = () => {
         txDetails
     } = useUsageSubscription();
 
-    const {
-        flowUser,
-        isConnected,
-        isConnecting,
-        primaryWallet,
-        dynamicUser,
-        connectWallet,
-        disconnectWallet
-    } = useDynamicFlow();
+    const [flowUser, setFlowUser] = useState(null);
+    const [isConnected, setIsConnected] = useState(false);
     const [subscriptions, setSubscriptions] = useState([]);
     const [providerAddress, setProviderAddress] = useState('0x6daee039a7b9c2f0');
     const [depositAmount, setDepositAmount] = useState('10.0');
@@ -42,10 +35,16 @@ const SubscriptionManager = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [successTransactionData, setSuccessTransactionData] = useState(null);
 
-    // Load user data when Dynamic wallet is connected
+    // Subscribe to FCL user authentication
     useEffect(() => {
-        if (isConnected && flowUser?.addr) {
-            console.log('📊 Loading data for Dynamic wallet:', flowUser.addr);
+        fcl.currentUser.subscribe(setFlowUser);
+    }, []);
+
+    // Update connection status based on user
+    useEffect(() => {
+        setIsConnected(!!flowUser?.loggedIn);
+        if (flowUser?.loggedIn && flowUser?.addr) {
+            console.log('📊 Loading data for Flow wallet:', flowUser.addr);
             loadUserData();
         } else {
             // Clear data when disconnected
@@ -53,13 +52,13 @@ const SubscriptionManager = () => {
             setFlowBalance(null);
             setFdcStatus(null);
         }
-    }, [isConnected, flowUser]);
+    }, [flowUser]);
 
     const loadUserData = async () => {
         if (!flowUser?.addr) return;
 
         try {
-            console.log('📊 Loading user data for Dynamic wallet:', flowUser.addr);
+            console.log('📊 Loading user data for Flow wallet:', flowUser.addr);
             
             // Check FLOW balance
             const balance = await checkFlowBalance(flowUser.addr);
@@ -73,36 +72,36 @@ const SubscriptionManager = () => {
             const fdc = await getFDCStatus();
             setFdcStatus(fdc);
             
-            console.log('✅ Dynamic wallet data loaded successfully');
+            console.log('✅ Flow wallet data loaded successfully');
         } catch (err) {
-            console.error('❌ Error loading Dynamic wallet data:', err);
+            console.error('❌ Error loading Flow wallet data:', err);
         }
     };
 
     const handleConnectWallet = async () => {
         try {
-            console.log('🔗 Connecting Dynamic wallet...');
-            await connectWallet();
-            console.log('✅ Dynamic wallet connection initiated');
+            console.log('🔗 Connecting Flow wallet...');
+            await fcl.authenticate();
+            console.log('✅ Flow wallet connection initiated');
         } catch (error) {
-            console.error('❌ Dynamic wallet connection failed:', error);
+            console.error('❌ Flow wallet connection failed:', error);
             alert('Failed to connect wallet. Please try again.');
         }
     };
 
     const handleDisconnectWallet = async () => {
         try {
-            console.log('🔌 Disconnecting Dynamic wallet...');
-            await disconnectWallet();
-            console.log('✅ Dynamic wallet disconnected');
+            console.log('🔌 Disconnecting Flow wallet...');
+            await fcl.unauthenticate();
+            console.log('✅ Flow wallet disconnected');
         } catch (error) {
-            console.error('❌ Dynamic wallet disconnection failed:', error);
+            console.error('❌ Flow wallet disconnection failed:', error);
         }
     };
 
     const handleCreateSubscription = async () => {
         if (!isConnected || !flowUser?.addr) {
-            alert('Please connect your Dynamic wallet first');
+            alert('Please connect your Flow wallet first');
             return;
         }
 
@@ -227,25 +226,22 @@ const SubscriptionManager = () => {
                 </div>
             </div>
 
-            {/* Dynamic Wallet Connection */}
+            {/* Flow Wallet Connection */}
             <div className="wallet-section">
-                <h2>👛 Dynamic Wallet Connection</h2>
+                <h2>👛 Flow Wallet Connection</h2>
                 {isConnected && flowUser?.addr ? (
                     <div className="wallet-connected">
                         <p>✅ Connected: {flowUser.addr}</p>
                         <p>💰 FLOW Balance: {flowBalance !== null ? `${flowBalance.toFixed(4)} FLOW` : 'Loading...'}</p>
-                        {primaryWallet && (
-                            <p>🔗 Wallet: {primaryWallet.connector?.name || 'Dynamic'}</p>
-                        )}
-                        <button onClick={handleDisconnectWallet} className="disconnect-button" disabled={isConnecting}>
-                            {isConnecting ? 'Disconnecting...' : 'Disconnect'}
+                        <button onClick={handleDisconnectWallet} className="disconnect-button">
+                            Disconnect
                         </button>
                     </div>
                 ) : (
                     <div className="wallet-disconnected">
-                        <p>Connect your Flow wallet via Dynamic to manage subscriptions</p>
-                        <button onClick={handleConnectWallet} className="connect-button" disabled={isConnecting}>
-                            {isConnecting ? 'Connecting...' : 'Connect Dynamic Wallet'}
+                        <p>Connect your Flow wallet to manage subscriptions</p>
+                        <button onClick={handleConnectWallet} className="connect-button">
+                            Connect Flow Wallet
                         </button>
                     </div>
                 )}
@@ -357,7 +353,7 @@ const SubscriptionManager = () => {
                             )
                         ) : (
                             <div className="auth-required">
-                                <p>🔐 Connect your Dynamic wallet to view subscriptions</p>
+                                <p>🔐 Connect your Flow wallet to view subscriptions</p>
                             </div>
                         )}
                     </div>

@@ -2,6 +2,31 @@ import "DeFiActions"
 import "FungibleToken"
 import "FlareFDCTriggers"
 
+/// LayerZero Endpoint interface for cross-chain messaging
+access(all) contract interface LayerZeroEndpoint {
+    access(all) resource interface Endpoint {
+        access(all) fun send(
+            dstChainId: UInt16,
+            destination: [UInt8],
+            payload: [UInt8],
+            refundAddress: Address,
+            zroPaymentAddress: Address?,
+            adapterParams: [UInt8]
+        )
+        
+        access(all) fun estimateFees(
+            dstChainId: UInt16,
+            userApplication: Address,
+            payload: [UInt8],
+            payInZRO: Bool,
+            adapterParams: [UInt8]
+        ): UFix64
+        
+        access(all) fun getInboundNonce(srcChainId: UInt16, srcAddress: [UInt8]): UInt64
+        access(all) fun getOutboundNonce(dstChainId: UInt16, srcAddress: Address): UInt64
+    }
+}
+
 /// LayerZeroConnectors: Simplified Flow Actions connectors for LayerZero cross-chain messaging
 /// Uses struct-based DeFiActions pattern for cross-chain operations
 access(all) contract LayerZeroConnectors {

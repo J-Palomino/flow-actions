@@ -7,6 +7,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [error, setError] = useState(null);
     const [showDetails, setShowDetails] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
+    const [showBridge, setShowBridge] = useState(false);
 
     useEffect(() => {
         if (subscription.litellmKey) {
@@ -304,6 +305,12 @@ response = client.chat.completions.create(
                             💰 Add FLOW
                         </button>
                         <button 
+                            onClick={() => setShowBridge(!showBridge)}
+                            className="bridge-button"
+                        >
+                            🌉 Cross-Chain Top-Up
+                        </button>
+                        <button 
                             onClick={fetchUsageData}
                             className="refresh-button"
                         >
@@ -314,6 +321,48 @@ response = client.chat.completions.create(
                             className="delete-button"
                         >
                             🗑️ Delete Subscription
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Cross-Chain Bridge */}
+            {showBridge && (
+                <div className="bridge-section">
+                    <div className="bridge-mock">
+                        <h3>🌉 Cross-Chain Bridge (Coming Soon)</h3>
+                        <p>Bridge tokens from Ethereum, Polygon, Arbitrum, and Base to top up your Flow subscription.</p>
+                        <div className="mock-form">
+                            <div className="form-row">
+                                <label>From Chain:</label>
+                                <select disabled>
+                                    <option>Ethereum</option>
+                                    <option>Polygon</option>
+                                    <option>Arbitrum</option>
+                                    <option>Base</option>
+                                </select>
+                            </div>
+                            <div className="form-row">
+                                <label>Token:</label>
+                                <select disabled>
+                                    <option>USDC</option>
+                                    <option>ETH</option>
+                                    <option>USDT</option>
+                                </select>
+                            </div>
+                            <div className="form-row">
+                                <label>Amount:</label>
+                                <input type="number" placeholder="100.0" disabled />
+                            </div>
+                            <button className="bridge-submit" disabled>
+                                🚧 Bridge Feature Under Development
+                            </button>
+                        </div>
+                        <button 
+                            onClick={() => setShowBridge(false)}
+                            className="close-bridge"
+                        >
+                            ✕ Close
                         </button>
                     </div>
                 </div>
@@ -608,7 +657,7 @@ response = client.chat.completions.create(
                     flex-wrap: wrap;
                 }
 
-                .update-button, .topup-button, .refresh-button, .delete-button {
+                .update-button, .topup-button, .bridge-button, .refresh-button, .delete-button {
                     padding: 8px 16px;
                     border: 1px solid #D1D5DB;
                     border-radius: 6px;
@@ -636,6 +685,16 @@ response = client.chat.completions.create(
 
                 .topup-button:hover {
                     background: #D97706;
+                }
+
+                .bridge-button {
+                    background: #8B5CF6;
+                    color: white;
+                    border-color: #8B5CF6;
+                }
+
+                .bridge-button:hover {
+                    background: #7C3AED;
                 }
 
                 .refresh-button {
@@ -829,7 +888,7 @@ response = client.chat.completions.create(
                         flex-direction: column;
                     }
 
-                    .update-button, .topup-button, .refresh-button, .delete-button {
+                    .update-button, .topup-button, .bridge-button, .refresh-button, .delete-button {
                         width: 100%;
                     }
 
@@ -849,6 +908,85 @@ response = client.chat.completions.create(
                     .usage-instructions {
                         padding: 16px;
                     }
+                }
+
+                .bridge-section {
+                    margin-top: 20px;
+                    padding-top: 20px;
+                    border-top: 1px solid #E5E7EB;
+                }
+
+                .bridge-mock {
+                    background: #F8FAFC;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 8px;
+                    padding: 20px;
+                    position: relative;
+                }
+
+                .bridge-mock h3 {
+                    margin: 0 0 8px 0;
+                    color: #1E40AF;
+                    font-size: 16px;
+                }
+
+                .bridge-mock p {
+                    margin: 0 0 16px 0;
+                    color: #6B7280;
+                    font-size: 14px;
+                }
+
+                .mock-form {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .form-row {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 4px;
+                }
+
+                .form-row label {
+                    font-weight: 500;
+                    color: #374151;
+                    font-size: 14px;
+                }
+
+                .form-row select, .form-row input {
+                    padding: 8px 12px;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 6px;
+                    background: #F9FAFB;
+                    color: #9CA3AF;
+                }
+
+                .bridge-submit {
+                    padding: 10px 16px;
+                    background: #F3F4F6;
+                    color: #6B7280;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 6px;
+                    font-weight: 500;
+                    cursor: not-allowed;
+                    margin-top: 8px;
+                }
+
+                .close-bridge {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    background: none;
+                    border: none;
+                    font-size: 16px;
+                    cursor: pointer;
+                    color: #6B7280;
+                    padding: 4px;
+                }
+
+                .close-bridge:hover {
+                    color: #374151;
                 }
             `}</style>
         </div>

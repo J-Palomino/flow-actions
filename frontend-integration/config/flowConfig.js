@@ -12,12 +12,11 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     console.log('🌊 Flow Environment detected:', FLOW_ENV);
 }
 
-// Mainnet-only configuration for Dynamic/Privy wallet integration
+// Mainnet-only configuration for native Flow wallet integration
 const FLOW_CONFIGS = {
     mainnet: {
         'accessNode.api': 'https://rest-mainnet.onflow.org',
         'discovery.wallet': 'https://fcl-discovery.onflow.org/authn',
-        'discovery.wallet.method': 'IFRAME/RPC',
         'app.detail.title': 'FlareFlow.link - Usage-Based Subscriptions (Mainnet)',
         'app.detail.icon': 'https://placekitten.com/g/200/200', 
         'flow.network': 'mainnet'
@@ -27,19 +26,18 @@ const FLOW_CONFIGS = {
 // Configure FCL for detected environment
 const currentConfig = FLOW_CONFIGS[FLOW_ENV];
 
-// Configure FCL for mainnet with Dynamic/Privy wallet support
+// Configure FCL for mainnet with native Flow wallet support
 try {
   fcl.config()
     .put('accessNode.api', currentConfig['accessNode.api'])
     .put('discovery.wallet', currentConfig['discovery.wallet'])
-    .put('discovery.wallet.method', currentConfig['discovery.wallet.method'])
     .put('app.detail.title', currentConfig['app.detail.title'])
     .put('app.detail.icon', currentConfig['app.detail.icon'])
     .put('flow.network', currentConfig['flow.network']);
   
   // Only log in development mode to prevent build hangs
   if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('✅ FCL configured successfully for MAINNET (Dynamic/Privy ready)');
+    console.log('✅ FCL configured successfully for MAINNET (Native Flow Wallet)');
     console.log('🌊 FCL Configuration:', currentConfig);
   }
 } catch (error) {
@@ -55,7 +53,6 @@ const CONTRACT_ADDRESSES = {
         UsageBasedSubscriptions: '0x6daee039a7b9c2f0',   // Real deployed contract
         FTSOPriceFeedConnector: '0x6daee039a7b9c2f0',    // Real deployed contract
         FlareFDCTriggers: '0x6daee039a7b9c2f0',          // Real deployed contract
-        LayerZeroConnectors: '0x6daee039a7b9c2f0',       // Real deployed contract
         ExampleConnectors: '0x6daee039a7b9c2f0'          // Real deployed contract
     }
 };
