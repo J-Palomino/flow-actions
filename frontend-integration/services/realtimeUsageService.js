@@ -170,7 +170,7 @@ class RealtimeUsageService {
 
         } catch (error) {
             console.error('Error fetching confirmed usage:', error);
-            return { tokens: 0, requests: 0, cost: 0 };
+            return { lastPaidTokens: 0, lastPaidRequests: 0, totalPaidAmount: 0 };
         }
     }
 

@@ -89,72 +89,81 @@ const RealtimeUsageDisplay = ({ subscription }) => {
             {/* Usage Summary */}
             <div className="usage-summary">
                 <div className="usage-card total">
-                    <h4>📊 Total Usage</h4>
+                    <h4>📊 Total Usage & Billing</h4>
                     <div className="usage-metrics">
                         <div className="metric">
-                            <span className="label">Tokens:</span>
+                            <span className="label">Total Tokens:</span>
                             <span className="value">{hybridUsage.total.tokens.toLocaleString()}</span>
                         </div>
                         <div className="metric">
-                            <span className="label">Requests:</span>
+                            <span className="label">Total Requests:</span>
                             <span className="value">{hybridUsage.total.requests}</span>
                         </div>
                         <div className="metric">
-                            <span className="label">Est. Cost:</span>
-                            <span className="value estimated">
-                                ${hybridUsage.total.estimatedCost.toFixed(6)}
+                            <span className="label">Already Paid:</span>
+                            <span className="value confirmed-cost">
+                                ${hybridUsage.total.billableCost.toFixed(6)} FLOW
+                            </span>
+                        </div>
+                        <div className="metric">
+                            <span className="label">Pending Payment:</span>
+                            <span className="value pending-cost">
+                                ${hybridUsage.total.pendingBill.toFixed(6)} FLOW
                             </span>
                         </div>
                     </div>
                 </div>
 
                 <div className="usage-split">
-                    {/* Pending Usage (Real-time) */}
+                    {/* Pending Payment */}
                     <div className="usage-card pending">
                         <div className="card-header">
-                            <h5>⏱️ Pending</h5>
-                            <span className="status-badge pending">AWAITING ORACLE</span>
+                            <h5>⏳ Pending Payment</h5>
+                            <span className="status-badge pending">AWAITING FLARE</span>
                         </div>
                         <div className="usage-metrics">
                             <div className="metric">
-                                <span className="label">Tokens:</span>
+                                <span className="label">New Tokens:</span>
                                 <span className="value">{hybridUsage.pending.tokens.toLocaleString()}</span>
                             </div>
                             <div className="metric">
-                                <span className="label">Requests:</span>
+                                <span className="label">New Requests:</span>
                                 <span className="value">{hybridUsage.pending.requests}</span>
                             </div>
                             <div className="metric">
-                                <span className="label">Cost:</span>
+                                <span className="label">Pending Bill:</span>
                                 <span className="value pending-cost">
-                                    ~${hybridUsage.pending.cost.toFixed(6)}
+                                    ${hybridUsage.pending.cost.toFixed(6)}
                                 </span>
                             </div>
                         </div>
                         <div className="data-freshness">
                             Updated: {hybridUsage.dataFreshness.pending}
                         </div>
+                        <div className="payment-note">
+                            💡 Will be automatically paid when Flare confirms usage
+                        </div>
                     </div>
 
-                    {/* Confirmed Usage (Oracle-verified) */}
+                    {/* Already Paid */}
                     <div className="usage-card confirmed">
                         <div className="card-header">
-                            <h5>✅ Confirmed</h5>
-                            <span className="status-badge confirmed">ORACLE VERIFIED</span>
+                            <h5>💰 Already Paid</h5>
+                            <span className="status-badge confirmed">PAID TO PROVIDER</span>
                         </div>
                         <div className="usage-metrics">
                             <div className="metric">
-                                <span className="label">Tokens:</span>
+                                <span className="label">Paid Tokens:</span>
                                 <span className="value">{hybridUsage.confirmed.tokens.toLocaleString()}</span>
                             </div>
                             <div className="metric">
-                                <span className="label">Requests:</span>
+                                <span className="label">Paid Requests:</span>
                                 <span className="value">{hybridUsage.confirmed.requests}</span>
                             </div>
                             <div className="metric">
-                                <span className="label">Billable:</span>
+                                <span className="label">Amount Paid:</span>
                                 <span className="value confirmed-cost">
-                                    ${hybridUsage.confirmed.cost.toFixed(6)}
+                                    ${hybridUsage.confirmed.cost.toFixed(6)} FLOW
                                 </span>
                             </div>
                         </div>
@@ -415,6 +424,17 @@ const RealtimeUsageDisplay = ({ subscription }) => {
 
                 .info-box li {
                     margin-bottom: 4px;
+                }
+                
+                .payment-note {
+                    margin-top: 8px;
+                    padding: 6px 10px;
+                    background: #FEF3C7;
+                    border: 1px solid #F59E0B;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    color: #92400E;
+                    font-style: italic;
                 }
 
                 .usage-loading {

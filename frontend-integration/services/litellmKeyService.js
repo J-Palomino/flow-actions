@@ -471,6 +471,227 @@ class LiteLLMKeyService {
         const match = apiKey.match(/vault(\d+)/);
         return match ? parseInt(match[1]) : null;
     }
+
+    /**
+     * Get available models from LiteLLM - REAL API CALL
+     * This shows users what models they can access with their subscription
+     */
+    async getAvailableModels() {
+        console.log('🔍 Fetching available models from LiteLLM...');
+        
+        try {
+            const endpoints = [
+                '/models',
+                '/v1/models',
+                '/model/list'
+            ];
+
+            let models = null;
+            let lastError = null;
+
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`   Trying: ${this.baseURL}${endpoint}`);
+                    
+                    const response = await axios.get(`${this.baseURL}${endpoint}`, {
+                        headers: {
+                            'Authorization': `Bearer ${this.adminKey}`,
+                            'Content-Type': 'application/json'
+                        },
+                        timeout: 10000
+                    });
+
+                    if (response.data) {
+                        console.log(`✅ Found models data at ${endpoint}`);
+                        models = this.processModelsData(response.data);
+                        break;
+                    }
+                } catch (endpointError) {
+                    console.log(`   Endpoint ${endpoint} failed:`, endpointError.response?.status || endpointError.message);
+                    lastError = endpointError;
+                    continue;
+                }
+            }
+
+            if (!models) {
+                console.warn('⚠️ No models data found from any LiteLLM endpoint, using defaults');
+                return this.getDefaultModels();
+            }
+
+            console.log(`✅ Successfully retrieved ${models.length} available models`);
+            return models;
+
+        } catch (error) {
+            console.error('❌ Error fetching available models:', error.message);
+            console.log('Using default model list as fallback');
+            return this.getDefaultModels();
+        }
+    }
+
+    /**
+     * Process models data from LiteLLM API response
+     */
+    processModelsData(rawData) {
+        console.log('🔄 Processing models data from LiteLLM API');
+        
+        try {
+            let modelsList = [];
+            
+            // Handle different possible response formats
+            if (Array.isArray(rawData)) {
+                modelsList = rawData;
+            } else if (rawData.data && Array.isArray(rawData.data)) {
+                modelsList = rawData.data;
+            } else if (rawData.models && Array.isArray(rawData.models)) {
+                modelsList = rawData.models;
+            } else {
+                console.warn('Unknown models data format, using object keys');
+                modelsList = Object.keys(rawData).map(id => ({ id, object: 'model' }));
+            }
+
+            // Transform to consistent format and add pricing info
+            const processedModels = modelsList.map(model => {
+                const modelId = model.id || model.model || model.name || model;
+                return {
+                    id: modelId,
+                    name: this.getModelDisplayName(modelId),
+                    provider: this.getModelProvider(modelId),
+                    tier: this.getModelTier(modelId),
+                    estimatedCostPer1kTokens: this.getModelPricing(modelId),
+                    description: this.getModelDescription(modelId)
+                };
+            });
+
+            // Sort by tier and name
+            return processedModels.sort((a, b) => {
+                const tierOrder = { 'premium': 0, 'standard': 1, 'budget': 2 };
+                if (tierOrder[a.tier] !== tierOrder[b.tier]) {
+                    return tierOrder[a.tier] - tierOrder[b.tier];
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+        } catch (error) {
+            console.error('Error processing models data:', error);
+            return this.getDefaultModels();
+        }
+    }
+
+    /**
+     * Get default models list as fallback
+     */
+    getDefaultModels() {
+        return [
+            {
+                id: 'gpt-4',
+                name: 'GPT-4',
+                provider: 'OpenAI',
+                tier: 'premium',
+                estimatedCostPer1kTokens: 0.03,
+                description: 'Most capable model, best for complex tasks'
+            },
+            {
+                id: 'gpt-4-turbo',
+                name: 'GPT-4 Turbo',
+                provider: 'OpenAI', 
+                tier: 'premium',
+                estimatedCostPer1kTokens: 0.01,
+                description: 'Fast GPT-4 with 128k context window'
+            },
+            {
+                id: 'gpt-3.5-turbo',
+                name: 'GPT-3.5 Turbo',
+                provider: 'OpenAI',
+                tier: 'standard',
+                estimatedCostPer1kTokens: 0.002,
+                description: 'Fast and efficient for most tasks'
+            },
+            {
+                id: 'claude-3-opus',
+                name: 'Claude 3 Opus',
+                provider: 'Anthropic',
+                tier: 'premium',
+                estimatedCostPer1kTokens: 0.015,
+                description: 'Anthropic\'s most powerful model'
+            },
+            {
+                id: 'claude-3-sonnet',
+                name: 'Claude 3 Sonnet',
+                provider: 'Anthropic',
+                tier: 'standard',
+                estimatedCostPer1kTokens: 0.003,
+                description: 'Balanced performance and cost'
+            },
+            {
+                id: 'claude-3-haiku',
+                name: 'Claude 3 Haiku',
+                provider: 'Anthropic',
+                tier: 'budget',
+                estimatedCostPer1kTokens: 0.00025,
+                description: 'Fast and affordable'
+            }
+        ];
+    }
+
+    // Helper methods for model information
+    getModelDisplayName(modelId) {
+        const names = {
+            'gpt-4': 'GPT-4',
+            'gpt-4-turbo': 'GPT-4 Turbo',
+            'gpt-3.5-turbo': 'GPT-3.5 Turbo',
+            'claude-3-opus': 'Claude 3 Opus',
+            'claude-3-sonnet': 'Claude 3 Sonnet',
+            'claude-3-haiku': 'Claude 3 Haiku',
+            'llama-2-70b': 'Llama 2 70B',
+            'mistral-large': 'Mistral Large'
+        };
+        return names[modelId] || modelId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+
+    getModelProvider(modelId) {
+        if (modelId.includes('gpt')) return 'OpenAI';
+        if (modelId.includes('claude')) return 'Anthropic';
+        if (modelId.includes('llama')) return 'Meta';
+        if (modelId.includes('mistral')) return 'Mistral';
+        return 'Unknown';
+    }
+
+    getModelTier(modelId) {
+        const premiumModels = ['gpt-4', 'claude-3-opus', 'mistral-large'];
+        const budgetModels = ['claude-3-haiku', 'llama-2'];
+        
+        if (premiumModels.some(pm => modelId.includes(pm))) return 'premium';
+        if (budgetModels.some(bm => modelId.includes(bm))) return 'budget';
+        return 'standard';
+    }
+
+    getModelPricing(modelId) {
+        const pricing = {
+            'gpt-4': 0.03,
+            'gpt-4-turbo': 0.01,
+            'gpt-3.5-turbo': 0.002,
+            'claude-3-opus': 0.015,
+            'claude-3-sonnet': 0.003,
+            'claude-3-haiku': 0.00025,
+            'llama-2-70b': 0.001,
+            'mistral-large': 0.008
+        };
+        return pricing[modelId] || 0.005; // Default pricing
+    }
+
+    getModelDescription(modelId) {
+        const descriptions = {
+            'gpt-4': 'Most capable model, best for complex tasks',
+            'gpt-4-turbo': 'Fast GPT-4 with 128k context window',
+            'gpt-3.5-turbo': 'Fast and efficient for most tasks',
+            'claude-3-opus': 'Anthropic\'s most powerful model',
+            'claude-3-sonnet': 'Balanced performance and cost',
+            'claude-3-haiku': 'Fast and affordable',
+            'llama-2-70b': 'Open source, good for general tasks',
+            'mistral-large': 'European AI, strong reasoning'
+        };
+        return descriptions[modelId] || 'AI language model available via LiteLLM';
+    }
 }
 
 // Export singleton instance

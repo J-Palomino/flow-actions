@@ -159,6 +159,10 @@ access(all) contract UsageBasedSubscriptions {
         access(all) var autoPay: Bool
         access(all) var maxMonthlySpend: UFix64
         
+        // Selected AI models (max 3)
+        access(all) let selectedModels: [String]  // Model IDs like ["gpt-4", "claude-3-sonnet"]
+        access(all) let modelPricing: {String: UFix64}  // Model-specific pricing overrides
+        
         /// Process usage data from FDC and update pricing
         access(all) fun processUsageData(usage: UsageReport) {
             // Store usage report
@@ -369,7 +373,8 @@ access(all) contract UsageBasedSubscriptions {
             vault: @{FungibleToken.Vault},
             entitlementType: EntitlementType,
             initialWithdrawLimit: UFix64,
-            validityPeriod: UFix64
+            validityPeriod: UFix64,
+            selectedModels: [String]
         ) {
             self.id = UsageBasedSubscriptions.totalVaults
             UsageBasedSubscriptions.totalVaults = UsageBasedSubscriptions.totalVaults + 1

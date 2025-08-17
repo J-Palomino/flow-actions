@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as fcl from '@onflow/fcl';
 import { useUsageSubscription } from '../hooks/useUsageSubscription';
+import litellmKeyService from '../services/litellmKeyService';
 
 const CreateSubscriptionForm = () => {
     const [user, setUser] = useState({ loggedIn: null });
@@ -15,6 +16,15 @@ const CreateSubscriptionForm = () => {
     const [withdrawLimit, setWithdrawLimit] = useState('50.0');
     const [expirationAmount, setExpirationAmount] = useState('30');
     const [expirationUnit, setExpirationUnit] = useState('days');
+    
+    // Available models from LiteLLM
+    const [availableModels, setAvailableModels] = useState([]);
+    const [modelsLoading, setModelsLoading] = useState(false);
+    const [showModels, setShowModels] = useState(false);
+    
+    // Selected models for subscription (max 3)
+    const [selectedModels, setSelectedModels] = useState([]);
+    const [estimatedMonthlyCost, setEstimatedMonthlyCost] = useState(0);
 
     const {
         createSubscriptionVault,
@@ -38,6 +48,11 @@ const CreateSubscriptionForm = () => {
             loadUserData();
         }
     }, [user.loggedIn, user.addr]);
+
+    // Load available models on component mount
+    useEffect(() => {
+        loadAvailableModels();
+    }, []);
 
     const loadUserData = async () => {
         try {
@@ -71,6 +86,52 @@ const CreateSubscriptionForm = () => {
         }
     };
 
+    const loadAvailableModels = async () => {
+        if (modelsLoading || availableModels.length > 0) return; // Avoid duplicate calls
+        
+        setModelsLoading(true);
+        try {
+            console.log('🔍 Loading available models from LiteLLM...');
+            const models = await litellmKeyService.getAvailableModels();
+            setAvailableModels(models);
+            console.log(`✅ Loaded ${models.length} available models`);
+        } catch (error) {
+            console.error('Failed to load models:', error);
+            // Fallback to default models if API fails
+            setAvailableModels(litellmKeyService.getDefaultModels());
+        } finally {
+            setModelsLoading(false);
+        }
+    };
+
+    const handleModelSelection = (model, isSelected) => {
+        if (isSelected) {
+            if (selectedModels.length >= 3) {
+                alert('You can select up to 3 models maximum');
+                return;
+            }
+            setSelectedModels([...selectedModels, model]);
+        } else {
+            setSelectedModels(selectedModels.filter(m => m.id !== model.id));
+        }
+    };
+
+    const calculateEstimatedCost = () => {
+        if (selectedModels.length === 0) return 0;
+        
+        // Estimate based on average costs and typical usage
+        const avgCostPer1k = selectedModels.reduce((sum, model) => sum + model.estimatedCostPer1kTokens, 0) / selectedModels.length;
+        const estimatedMonthlyTokens = 100000; // Assume 100k tokens/month average
+        const estimatedCost = (estimatedMonthlyTokens / 1000) * avgCostPer1k;
+        
+        return estimatedCost;
+    };
+
+    // Update estimated cost when selected models change
+    React.useEffect(() => {
+        setEstimatedMonthlyCost(calculateEstimatedCost());
+    }, [selectedModels]);
+
     const handleCreateSubscription = async (e) => {
         e.preventDefault();
         
@@ -84,13 +145,19 @@ const CreateSubscriptionForm = () => {
             return;
         }
 
+        if (selectedModels.length === 0) {
+            alert('Please select at least 1 model (up to 3 maximum)');
+            return;
+        }
+
         const result = await createSubscriptionVault(
             providerAddress, 
             parseFloat(depositAmount),
             entitlementType,
             parseFloat(withdrawLimit),
             parseInt(expirationAmount),
-            expirationUnit
+            expirationUnit,
+            selectedModels
         );
         
         if (result.success) {
@@ -286,6 +353,134 @@ const CreateSubscriptionForm = () => {
                         <p className="text-xs text-gray-600 mt-1">
                             Entitlement expires in {expirationAmount} {expirationUnit}. You can always create a new subscription to renew.
                         </p>
+                    </div>
+
+                    {/* Model Selection Section */}
+                    <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-green-50">
+                        <div className="mb-3">
+                            <h4 className="font-semibold text-green-800 mb-2">🤖 Select AI Models (Choose up to 3)</h4>
+                            <p className="text-sm text-green-700">
+                                Choose which models you want access to. Your API key will only work with selected models.
+                            </p>
+                        </div>
+                        
+                        {modelsLoading && (
+                            <div className="flex items-center space-x-2 text-green-700">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-700"></div>
+                                <span className="text-sm">Loading available models...</span>
+                            </div>
+                        )}
+                        
+                        {!modelsLoading && availableModels.length > 0 && (
+                            <>
+                                <div className="grid md:grid-cols-2 gap-3 mb-4">
+                                    {availableModels.map((model) => {
+                                        const isSelected = selectedModels.some(m => m.id === model.id);
+                                        const canSelect = selectedModels.length < 3 || isSelected;
+                                        
+                                        return (
+                                            <div 
+                                                key={model.id} 
+                                                className={`relative border rounded-lg p-3 cursor-pointer transition-all ${
+                                                    isSelected 
+                                                        ? 'border-green-500 bg-green-100' 
+                                                        : canSelect
+                                                            ? 'border-gray-300 bg-white hover:border-green-300'
+                                                            : 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed'
+                                                }`}
+                                                onClick={() => canSelect && handleModelSelection(model, !isSelected)}
+                                            >
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center space-x-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            disabled={!canSelect}
+                                                            onChange={() => {}} // Handled by div onClick
+                                                            className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                                                        />
+                                                        <div>
+                                                            <h5 className="font-semibold text-gray-900 text-sm">{model.name}</h5>
+                                                            <p className="text-xs text-gray-600">{model.provider}</p>
+                                                        </div>
+                                                    </div>
+                                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                                        model.tier === 'premium' ? 'bg-purple-100 text-purple-800' :
+                                                        model.tier === 'standard' ? 'bg-blue-100 text-blue-800' :
+                                                        'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                        {model.tier}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-gray-700 mb-2">{model.description}</p>
+                                                <div className="text-xs text-green-700 font-medium">
+                                                    ${model.estimatedCostPer1kTokens.toFixed(4)}/1K tokens
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="absolute top-2 right-2">
+                                                        <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                                                            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Selected Models Summary */}
+                                <div className="bg-white rounded-lg p-3 border border-green-200">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h6 className="font-semibold text-gray-900">Selected Models ({selectedModels.length}/3)</h6>
+                                        {selectedModels.length > 0 && (
+                                            <span className="text-sm text-green-700 font-medium">
+                                                Est: ${estimatedMonthlyCost.toFixed(2)}/month
+                                            </span>
+                                        )}
+                                    </div>
+                                    {selectedModels.length > 0 ? (
+                                        <div className="space-y-1">
+                                            {selectedModels.map(model => (
+                                                <div key={model.id} className="flex justify-between items-center text-sm">
+                                                    <span>✅ {model.name}</span>
+                                                    <span className="text-gray-600">${model.estimatedCostPer1kTokens.toFixed(4)}/1K</span>
+                                                </div>
+                                            ))}
+                                            <div className="mt-2 pt-2 border-t border-gray-200">
+                                                <p className="text-xs text-gray-600">
+                                                    💡 Estimated cost assumes ~100K tokens/month usage across selected models
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-gray-600">Please select at least 1 model to proceed</p>
+                                    )}
+                                </div>
+
+                                {/* Usage Instructions */}
+                                {selectedModels.length > 0 && (
+                                    <div className="bg-white rounded-lg p-3 border border-green-200 mt-3">
+                                        <h6 className="font-semibold text-gray-900 mb-2">🔗 Usage Example</h6>
+                                        <p className="text-sm text-gray-700 mb-2">
+                                            Your API key will work with these models at our endpoint:
+                                        </p>
+                                        <code className="block bg-gray-100 p-2 rounded text-xs">
+                                            curl https://llm.p10p.io/v1/chat/completions \<br/>
+                                            &nbsp;&nbsp;-H "Authorization: Bearer YOUR_API_KEY" \<br/>
+                                            &nbsp;&nbsp;-d '{{"model": "{selectedModels[0].id}", "messages": [...]}}'
+                                        </code>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                        
+                        {!modelsLoading && availableModels.length === 0 && (
+                            <p className="text-sm text-yellow-700">
+                                ⚠️ Could not load models list. Please try refreshing the page.
+                            </p>
+                        )}
                     </div>
 
                     <div className="bg-blue-50 rounded-lg p-4 mb-4">
