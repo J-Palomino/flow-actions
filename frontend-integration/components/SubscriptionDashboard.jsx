@@ -4,6 +4,7 @@ import { useUsageSubscription } from '../hooks/useUsageSubscription';
 import { PRICING_TIERS, TX_STATUS } from '../config/flowConfig';
 import StorageChecker from './StorageChecker';
 import UsageDashboard from './UsageDashboard';
+import AdminPricingControls from './AdminPricingControls';
 
 const SubscriptionDashboard = () => {
     const {
@@ -219,6 +220,7 @@ const SubscriptionDashboard = () => {
                 <button 
                     onClick={() => setActiveTab('pricing')}
                     style={{ 
+                        marginRight: '10px',
                         padding: '10px 20px',
                         backgroundColor: activeTab === 'pricing' ? '#4169E1' : '#333',
                         color: 'white',
@@ -229,6 +231,21 @@ const SubscriptionDashboard = () => {
                 >
                     Pricing Tiers
                 </button>
+                {user?.addr === '0x6daee039a7b9c2f0' && (
+                    <button 
+                        onClick={() => setActiveTab('admin')}
+                        style={{ 
+                            padding: '10px 20px',
+                            backgroundColor: activeTab === 'admin' ? '#DC2626' : '#333',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        🔧 Admin Controls
+                    </button>
+                )}
             </div>
 
             {/* Tab Content */}
@@ -411,6 +428,17 @@ const SubscriptionDashboard = () => {
                         </ol>
                     </div>
                 </div>
+            )}
+
+            {activeTab === 'admin' && (
+                <AdminPricingControls 
+                    account={user?.addr}
+                    onPricingUpdate={(config) => {
+                        console.log('Pricing configuration updated:', config);
+                        // Optionally refresh data
+                        loadUserData();
+                    }}
+                />
             )}
 
             {/* Error Display */}

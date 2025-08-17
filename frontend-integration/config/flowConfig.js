@@ -35,5 +35,6 @@ export const PRICING_TIERS = {
     ENTERPRISE: { name: 'Enterprise', range: '10M+', price: 0.008, discount: 30 }
 };
 
-// Export configured fcl
-export { fcl } from '@onflow/fcl';
+// Import and re-export fcl
+import * as fcl from '@onflow/fcl';
+export { fcl };
