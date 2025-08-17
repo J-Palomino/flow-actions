@@ -72,10 +72,11 @@ class RealtimeUsageService {
                 
                 // Combined totals
                 total: {
-                    tokens: (pending.tokens || 0) + (confirmed.tokens || 0),
-                    requests: (pending.requests || 0) + (confirmed.requests || 0),
-                    estimatedCost: (pending.cost || 0) + (confirmed.cost || 0),
-                    billableCost: confirmed.cost || 0, // Only confirmed is billable
+                    tokens: totalTokens,
+                    requests: totalRequests,
+                    estimatedCost: totalCost,
+                    billableCost: paidCost, // Amount actually paid to provider
+                    pendingBill: pendingCost, // Amount waiting for payment
                 },
                 
                 // Time until next oracle update
@@ -158,12 +159,12 @@ class RealtimeUsageService {
                 return cached;
             }
 
-            // Default confirmed data
+            // Default vault status data
             return {
-                tokens: 0,
-                requests: 0,
-                cost: 0,
-                attestationTime: null,
+                lastPaidTokens: 0,
+                lastPaidRequests: 0,
+                totalPaidAmount: 0,
+                lastOracleUpdate: null,
                 roundId: null
             };
 
