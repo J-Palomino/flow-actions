@@ -1,6 +1,8 @@
 # Flow CLI and binaries
 flow-cli.exe
 flow-cli.zip
+flow.exe
+*.exe
 imports/
 
 # Private keys and sensitive files
@@ -34,6 +36,7 @@ yarn-error.log*
 # Next.js build output
 .next/
 out/
+*/.next/
 
 # IDE and editor files
 .vscode/
