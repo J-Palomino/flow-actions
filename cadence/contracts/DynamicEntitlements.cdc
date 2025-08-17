@@ -262,13 +262,13 @@ access(all) contract DynamicEntitlements {
     }
     
     /// Create capability for provider with automation entitlements
-    access(all) fun createProviderCapability(vault: &SubscriptionVault): Capability<auth(ProviderEntitlements) &SubscriptionVault> {
+    access(all) fun createProviderCapability(vault: &SubscriptionVault): Capability<&SubscriptionVault> {
         // This would be implemented by the account holder to grant provider access
         panic("Must be implemented by account holder")
     }
     
     /// Create capability for customer with deposit entitlements
-    access(all) fun createCustomerCapability(vault: &SubscriptionVault): Capability<auth(CustomerEntitlements) &SubscriptionVault> {
+    access(all) fun createCustomerCapability(vault: &SubscriptionVault): Capability<&SubscriptionVault> {
         // This would be implemented by the account holder to grant customer access
         panic("Must be implemented by account holder")
     }

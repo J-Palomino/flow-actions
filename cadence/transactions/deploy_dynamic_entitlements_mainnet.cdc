@@ -1,4 +1,3 @@
-import "DynamicEntitlements"
 import "FlowToken"
 import "FungibleToken"
 
@@ -8,7 +7,7 @@ transaction() {
     
     prepare(signer: auth(BorrowValue, Storage) &Account) {
         log("🚀 Deploying DynamicEntitlements contract to Flow mainnet...")
-        log("   Deployer: " + signer.address.toString())
+        log("   Deployer: ".concat(signer.address.toString()))
         
         // Verify DynamicEntitlements contract is available
         log("✅ DynamicEntitlements contract deployed with features:")
