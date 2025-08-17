@@ -1,7 +1,7 @@
 {
-  "name": "usage-based-subscriptions-frontend",
+  "name": "flareflow-link",
   "version": "1.0.0",
-  "description": "Next.js frontend for usage-based LiteLLM subscriptions on Flow",
+  "description": "FlareFlow.link - LiteLLM API key management with Flare oracle integration and Flow blockchain billing",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,6 +11,7 @@
   "dependencies": {
     "@onflow/fcl": "^1.12.2",
     "@onflow/types": "^1.4.0",
+    "axios": "^1.11.0",
     "next": "^14.0.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
@@ -23,14 +24,17 @@
     "tailwindcss": "^3.0.0"
   },
   "keywords": [
+    "flareflow",
+    "flare",
     "flow",
     "blockchain",
-    "subscription",
-    "usage-based",
+    "oracle",
     "litellm",
+    "api-keys",
+    "usage-based-billing",
     "nextjs",
     "react"
   ],
-  "author": "Your Name",
+  "author": "FlareFlow.link",
   "license": "MIT"
 }

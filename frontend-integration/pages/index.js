@@ -1,14 +1,14 @@
 import React, { useEffect } from 'react';
 import Head from 'next/head';
-import SubscriptionDashboard from '../components/SubscriptionDashboard';
+import SubscriptionManager from '../components/SubscriptionManager';
 import '../config/flowConfig'; // Initialize Flow configuration
 
 export default function Home() {
     return (
         <div className="min-h-screen bg-gray-100">
             <Head>
-                <title>Flow Actions + Flare Oracle - Usage-Based Subscriptions</title>
-                <meta name="description" content="Dynamic pricing with Flare oracle data feeds on Flow Mainnet" />
+                <title>FlareFlow.link - LiteLLM API Key Management & Usage-Based Billing</title>
+                <meta name="description" content="FlareFlow.link: Create individual LiteLLM subscriptions with unique API keys, real-time usage tracking, and Flow blockchain billing" />
                 <link rel="icon" href="/favicon.ico" />
             </Head>
 
@@ -18,54 +18,54 @@ export default function Home() {
                     <div className="container mx-auto px-4 py-8">
                         <div className="text-center mb-8">
                             <h1 className="text-5xl font-bold mb-4">
-                                🚀 Flow Actions + Flare Oracle
+                                🔗 FlareFlow.link
                             </h1>
                             <p className="text-xl text-gray-300 max-w-4xl mx-auto mb-6">
-                                Revolutionary usage-based subscriptions powered by Flare oracle data feeds, 
-                                deployed on Flow Mainnet with real-time transaction insights.
+                                The premier platform for LiteLLM API key management with Flare oracle integration, 
+                                Flow blockchain billing, and real-time usage analytics.
                             </p>
                             <div className="flex justify-center space-x-6 text-sm">
-                                <span className="bg-blue-600 px-3 py-1 rounded">Contract: 0x6daee039a7b9c2f0</span>
-                                <span className="bg-green-600 px-3 py-1 rounded">Network: Flow Mainnet</span>
-                                <span className="bg-purple-600 px-3 py-1 rounded">Oracle: Flare FDC</span>
+                                <span className="bg-orange-600 px-3 py-1 rounded">🔥 Flare Oracle</span>
+                                <span className="bg-blue-600 px-3 py-1 rounded">⚡ Flow Blockchain</span>
+                                <span className="bg-purple-600 px-3 py-1 rounded">🔑 LiteLLM Keys</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Main Dashboard */}
+                {/* Main Manager */}
                 <div className="container mx-auto px-4">
-                    <SubscriptionDashboard />
+                    <SubscriptionManager />
                 </div>
 
                 {/* Footer */}
                 <div className="bg-gray-900 text-white mt-16">
                     <div className="container mx-auto px-4 py-12">
                         <div className="text-center mb-8">
-                            <h2 className="text-3xl font-bold mb-4">🌟 Next-Generation DeFi Infrastructure</h2>
+                            <h2 className="text-3xl font-bold mb-4">🌟 The Future of AI API Management</h2>
                             <p className="text-gray-300 max-w-3xl mx-auto">
-                                Experience the future of usage-based billing with Flow Actions framework, 
-                                Flare oracle integration, and real-time transaction insights.
+                                FlareFlow.link bridges Flare oracle data with Flow blockchain payments, 
+                                creating the most advanced LiteLLM subscription platform available.
                             </p>
                         </div>
                         
                         <div className="grid md:grid-cols-3 gap-8 mb-8">
                             <div className="text-center">
-                                <h3 className="text-xl font-semibold mb-3">📡 Flare Oracle</h3>
+                                <h3 className="text-xl font-semibold mb-3">🔥 Flare Oracle Integration</h3>
                                 <p className="text-gray-300 text-sm">
-                                    Real-time data feeds from external services with cryptographic verification
+                                    Real-time usage data verification and cross-chain oracle feeds
                                 </p>
                             </div>
                             <div className="text-center">
-                                <h3 className="text-xl font-semibold mb-3">⚡ Flow Actions</h3>
+                                <h3 className="text-xl font-semibold mb-3">⚡ Flow Blockchain Payments</h3>
                                 <p className="text-gray-300 text-sm">
-                                    Composable DeFi operations with standardized connector patterns
+                                    Transparent, immutable billing with usage-based smart contracts
                                 </p>
                             </div>
                             <div className="text-center">
-                                <h3 className="text-xl font-semibold mb-3">🔗 LayerZero</h3>
+                                <h3 className="text-xl font-semibold mb-3">🔗 Seamless Integration</h3>
                                 <p className="text-gray-300 text-sm">
-                                    Cross-chain messaging for seamless multi-chain DeFi operations
+                                    One-click LiteLLM subscriptions with automatic key management
                                 </p>
                             </div>
                         </div>
@@ -98,7 +98,7 @@ export default function Home() {
                                 </a>
                             </div>
                             <div className="text-center mt-6 text-gray-400 text-sm">
-                                <p>Deployed on Flow Mainnet | Flare Testnet (Coston2) | © 2025 Flow Actions Scaffold</p>
+                                <p>FlareFlow.link | Flare Oracle ⚡ Flow Blockchain | © 2025</p>
                             </div>
                         </div>
                     </div>

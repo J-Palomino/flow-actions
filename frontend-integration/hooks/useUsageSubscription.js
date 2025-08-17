@@ -357,6 +357,92 @@ export const useUsageSubscription = () => {
         }
     };
 
+    // Get all user subscriptions
+    const getUserSubscriptions = async (userAddress) => {
+        try {
+            // Get subscriptions from local storage (in production, from database/API)
+            const subscriptions = JSON.parse(localStorage.getItem('subscriptions') || '[]');
+            
+            // Filter by user address
+            const userSubscriptions = subscriptions.filter(
+                sub => sub.customer.toLowerCase() === userAddress.toLowerCase()
+            );
+            
+            console.log(`📋 Found ${userSubscriptions.length} subscriptions for user ${userAddress}`);
+            
+            return userSubscriptions;
+            
+        } catch (err) {
+            console.error('Error fetching user subscriptions:', err);
+            throw err;
+        }
+    };
+
+    // Update subscription settings
+    const updateSubscription = async (vaultId, updates) => {
+        try {
+            const subscriptions = JSON.parse(localStorage.getItem('subscriptions') || '[]');
+            const subscriptionIndex = subscriptions.findIndex(sub => sub.vaultId === vaultId);
+            
+            if (subscriptionIndex === -1) {
+                throw new Error('Subscription not found');
+            }
+            
+            // Update subscription
+            subscriptions[subscriptionIndex] = {
+                ...subscriptions[subscriptionIndex],
+                ...updates,
+                updatedAt: new Date().toISOString()
+            };
+            
+            localStorage.setItem('subscriptions', JSON.stringify(subscriptions));
+            
+            // If updating LiteLLM key settings, update the key
+            if (updates.maxBudget || updates.permissions) {
+                const subscription = subscriptions[subscriptionIndex];
+                await litellmKeyService.updateKey(subscription.litellmKey, {
+                    max_budget: updates.maxBudget,
+                    permissions: updates.permissions
+                });
+            }
+            
+            console.log(`✅ Subscription ${vaultId} updated successfully`);
+            
+            return subscriptions[subscriptionIndex];
+            
+        } catch (err) {
+            console.error('Error updating subscription:', err);
+            throw err;
+        }
+    };
+
+    // Delete subscription
+    const deleteSubscription = async (vaultId) => {
+        try {
+            const subscriptions = JSON.parse(localStorage.getItem('subscriptions') || '[]');
+            const subscription = subscriptions.find(sub => sub.vaultId === vaultId);
+            
+            if (!subscription) {
+                throw new Error('Subscription not found');
+            }
+            
+            // Revoke LiteLLM key
+            await litellmKeyService.revokeKey(subscription.litellmKey);
+            
+            // Remove from storage
+            const updatedSubscriptions = subscriptions.filter(sub => sub.vaultId !== vaultId);
+            localStorage.setItem('subscriptions', JSON.stringify(updatedSubscriptions));
+            
+            console.log(`🗑️ Subscription ${vaultId} deleted successfully`);
+            
+            return true;
+            
+        } catch (err) {
+            console.error('Error deleting subscription:', err);
+            throw err;
+        }
+    };
+
     return {
         createSubscriptionVault,
         topUpSubscription,
@@ -364,6 +450,9 @@ export const useUsageSubscription = () => {
         checkFlowBalance,
         checkVaultExists,
         getFDCStatus,
+        getUserSubscriptions,
+        updateSubscription,
+        deleteSubscription,
         isLoading,
         error,
         txStatus,
