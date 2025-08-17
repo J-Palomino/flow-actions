@@ -5,6 +5,69 @@ import { CONTRACTS, TX_STATUS } from '../config/flowConfig';
 import litellmKeyService from '../services/litellmKeyService';
 
 // Transaction templates
+const CREATE_SUBSCRIPTION_WITH_ENTITLEMENT_TRANSACTION = `
+import FlowToken from ${CONTRACTS.FlowToken}
+import FungibleToken from ${CONTRACTS.FungibleToken}
+import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+
+transaction(
+    providerAddress: Address,
+    initialDeposit: UFix64,
+    entitlementType: String,
+    withdrawLimit: UFix64,
+    expirationAmount: UInt64,
+    expirationUnit: String
+) {
+    
+    let vault: @FlowToken.Vault
+    let customerAddress: Address
+    
+    prepare(signer: auth(BorrowValue) &Account) {
+        self.customerAddress = signer.address
+        
+        // Withdraw FLOW from signer's vault
+        let flowVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(
+            from: /storage/flowTokenVault
+        ) ?? panic("Could not borrow Flow vault from storage")
+        
+        self.vault <- flowVault.withdraw(amount: initialDeposit) as! @FlowToken.Vault
+    }
+    
+    execute {
+        // Convert entitlement type string to enum
+        let entitlementTypeEnum: UsageBasedSubscriptions.EntitlementType
+        if entitlementType == "fixed" {
+            entitlementTypeEnum = UsageBasedSubscriptions.EntitlementType.fixed
+        } else {
+            entitlementTypeEnum = UsageBasedSubscriptions.EntitlementType.dynamic
+        }
+        
+        // Convert expiration to seconds
+        let validityPeriod = UsageBasedSubscriptions.convertToSeconds(
+            amount: expirationAmount,
+            unit: expirationUnit
+        )
+        
+        // Create subscription vault with entitlement settings
+        let vaultId = UsageBasedSubscriptions.createSubscriptionVault(
+            owner: self.customerAddress,
+            provider: providerAddress,
+            serviceName: "LiteLLM API Access",
+            initialDeposit: <- self.vault,
+            entitlementType: entitlementTypeEnum,
+            initialWithdrawLimit: withdrawLimit,
+            validityPeriod: validityPeriod
+        )
+        
+        log("✅ Subscription created with entitlement settings!")
+        log("  - Vault ID: ".concat(vaultId.toString()))
+        log("  - Entitlement Type: ".concat(entitlementType))
+        log("  - Withdraw Limit: ".concat(withdrawLimit.toString()).concat(" FLOW"))
+        log("  - Expires In: ".concat(expirationAmount.toString()).concat(" ").concat(expirationUnit))
+    }
+}
+`;
+
 const CREATE_SUBSCRIPTION_TRANSACTION = `
 import FlowToken from ${CONTRACTS.FlowToken}
 import FungibleToken from ${CONTRACTS.FungibleToken}
@@ -221,7 +284,7 @@ export const useUsageSubscription = () => {
 
     // Create usage-based subscription vault with LiteLLM key - REAL BLOCKCHAIN TRANSACTION
     // 1 User -> Many Subscriptions -> 1 Subscription -> 1 LiteLLM Key -> Independent Usage Data
-    const createSubscriptionVault = async (providerAddress, initialDepositAmount, customerAddress) => {
+    const createSubscriptionVault = async (providerAddress, initialDepositAmount, entitlementType, withdrawLimit, expirationAmount, expirationUnit, customerAddress) => {
         setIsLoading(true);
         setError(null);
         setTxStatus(TX_STATUS.PENDING);
@@ -252,13 +315,20 @@ export const useUsageSubscription = () => {
             }
             
             // Execute REAL Flow blockchain transaction with user's connected wallet funds
-            console.log('💾 Executing REAL Flow transaction (funding from connected wallet)...');
+            console.log('💾 Executing REAL Flow transaction with entitlement settings...');
+            console.log(`   Entitlement type: ${entitlementType}`);
+            console.log(`   Withdraw limit: ${withdrawLimit} FLOW`);
+            console.log(`   Expiration: ${expirationAmount} ${expirationUnit}`);
+            
             const txId = await fcl.mutate({
-                cadence: CREATE_SUBSCRIPTION_TRANSACTION,
+                cadence: CREATE_SUBSCRIPTION_WITH_ENTITLEMENT_TRANSACTION,
                 args: (arg, t) => [
                     arg(providerAddress, t.Address),
                     arg(initialDepositAmount.toFixed(8), t.UFix64),
-                    arg(vaultIdentifier, t.String)
+                    arg(entitlementType, t.String),
+                    arg(withdrawLimit.toFixed(8), t.UFix64),
+                    arg(expirationAmount, t.UInt64),
+                    arg(expirationUnit, t.String)
                 ],
                 limit: 9999,
                 proposer: fcl.authz,

@@ -140,6 +140,12 @@ access(all) contract UsageBasedSubscriptions {
         access(all) var usageHistory: [UsageReport]
         access(all) var currentTier: PricingTier
         
+        // Cumulative usage tracking for differential payments
+        access(all) var lastPaidTokens: UInt64      // Tokens we've already paid for
+        access(all) var lastPaidRequests: UInt64    // Requests we've already paid for
+        access(all) var totalPaidAmount: UFix64     // Total FLOW paid to provider
+        access(all) var lastOracleUpdate: UFix64    // Timestamp of last oracle confirmation
+        
         // Dynamic pricing
         access(all) var basePrice: UFix64
         access(all) var usageMultiplier: UFix64
@@ -158,22 +164,49 @@ access(all) contract UsageBasedSubscriptions {
             self.currentUsage = usage
             self.usageHistory.append(usage)
             
-            // Update pricing tier based on usage
-            let newTier = UsageBasedSubscriptions.calculateTier(usage.totalTokens)
-            if newTier.name != self.currentTier.name {
-                emit UsageTierChanged(
-                    vaultId: self.id,
-                    oldTier: self.currentTier.name,
-                    newTier: newTier.name
+            // Calculate NEW usage since last payment (differential)
+            let newTokens = usage.totalTokens > self.lastPaidTokens ? usage.totalTokens - self.lastPaidTokens : 0
+            let newRequests = usage.apiCalls > self.lastPaidRequests ? usage.apiCalls - self.lastPaidRequests : 0
+            
+            log("📊 Processing differential usage:")
+            log("   Total tokens: " + usage.totalTokens.toString() + " (+" + newTokens.toString() + " new)")
+            log("   Total requests: " + usage.apiCalls.toString() + " (+" + newRequests.toString() + " new)")
+            log("   Last paid tokens: " + self.lastPaidTokens.toString())
+            
+            // Only process payment if there's NEW usage
+            if newTokens > 0 || newRequests > 0 {
+                // Update pricing tier based on TOTAL usage
+                let newTier = UsageBasedSubscriptions.calculateTier(usage.totalTokens)
+                if newTier.name != self.currentTier.name {
+                    emit UsageTierChanged(
+                        vaultId: self.id,
+                        oldTier: self.currentTier.name,
+                        newTier: newTier.name
+                    )
+                    self.currentTier = newTier
+                }
+                
+                // Calculate price for NEW usage only
+                let newUsageReport = UsageReport(
+                    timestamp: usage.timestamp,
+                    period: usage.period,
+                    totalTokens: newTokens,
+                    apiCalls: newRequests,
+                    models: usage.models,
+                    costEstimate: 0.0, // Will be calculated
+                    metadata: usage.metadata
                 )
-                self.currentTier = newTier
+                
+                self.calculateDynamicPrice(newUsageReport)
+                
+                // Process automatic payment for new usage
+                self.processAutomaticPayment(newUsageAmount: self.currentPrice)
+                
+                // Update paid tracking
+                self.lastPaidTokens = usage.totalTokens
+                self.lastPaidRequests = usage.apiCalls
+                self.lastOracleUpdate = getCurrentBlock().timestamp
             }
-            
-            // Calculate dynamic price
-            self.calculateDynamicPrice(usage)
-            
-            // Update entitlement based on new pricing
-            self.updateEntitlement()
             
             emit UsageDataReceived(
                 vaultId: self.id,
@@ -248,6 +281,63 @@ access(all) contract UsageBasedSubscriptions {
             )
             
             return <- payment
+        }
+        
+        /// Process automatic payment to provider based on new usage
+        access(self) fun processAutomaticPayment(newUsageAmount: UFix64) {
+            // Check if automatic payments are enabled
+            if !self.autoPay {
+                log("⏸️ Auto-pay disabled, skipping automatic payment")
+                return
+            }
+            
+            // Check if vault has sufficient balance
+            if self.vault.balance < newUsageAmount {
+                log("⚠️ Insufficient vault balance for automatic payment")
+                log("   Required: " + newUsageAmount.toString() + " FLOW")
+                log("   Available: " + self.vault.balance.toString() + " FLOW")
+                return
+            }
+            
+            // Check monthly spending limits
+            if self.totalPaidAmount + newUsageAmount > self.maxMonthlySpend {
+                log("⚠️ Monthly spending limit exceeded, skipping automatic payment")
+                log("   Would exceed limit by: " + (self.totalPaidAmount + newUsageAmount - self.maxMonthlySpend).toString() + " FLOW")
+                return
+            }
+            
+            // Process automatic payment
+            log("💰 Processing automatic payment:")
+            log("   Amount: " + newUsageAmount.toString() + " FLOW")
+            log("   Provider: " + self.provider.toString())
+            
+            // Transfer funds directly to provider
+            let payment <- self.vault.withdraw(amount: newUsageAmount)
+            
+            // Get provider's Flow vault and deposit payment
+            let providerAccount = getAccount(self.provider)
+            let providerReceiver = providerAccount.capabilities.get<&{FungibleToken.Receiver}>(/public/flowTokenReceiver)!
+            let receiverRef = providerReceiver.borrow()!
+            receiverRef.deposit(from: <- payment)
+            
+            // Update tracking
+            self.totalPaidAmount = self.totalPaidAmount + newUsageAmount
+            self.entitlement.recordWithdrawal(amount: newUsageAmount)
+            
+            emit PaymentProcessed(
+                vaultId: self.id,
+                amount: newUsageAmount,
+                provider: self.provider
+            )
+            
+            emit AutomaticPaymentProcessed(
+                vaultId: self.id,
+                amount: newUsageAmount,
+                provider: self.provider,
+                totalPaidToDate: self.totalPaidAmount
+            )
+            
+            log("✅ Automatic payment completed successfully")
         }
         
         /// Deposit funds to vault

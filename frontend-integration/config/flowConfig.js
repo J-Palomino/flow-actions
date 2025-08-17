@@ -14,6 +14,7 @@ export const CONTRACTS = {
     FlowToken: '0x1654653399040a61',
     FungibleToken: '0xf233dcee88fe0abe',
     SimpleUsageSubscriptions: '0x6daee039a7b9c2f0',
+    UsageBasedSubscriptions: '0x6daee039a7b9c2f0',
     FlareFDCTriggers: '0x6daee039a7b9c2f0',
     LayerZeroConnectors: '0x6daee039a7b9c2f0',
     ExampleConnectors: '0x6daee039a7b9c2f0'

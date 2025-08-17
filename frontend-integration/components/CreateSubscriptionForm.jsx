@@ -84,7 +84,14 @@ const CreateSubscriptionForm = () => {
             return;
         }
 
-        const result = await createSubscriptionVault(providerAddress, parseFloat(depositAmount));
+        const result = await createSubscriptionVault(
+            providerAddress, 
+            parseFloat(depositAmount),
+            entitlementType,
+            parseFloat(withdrawLimit),
+            parseInt(expirationAmount),
+            expirationUnit
+        );
         
         if (result.success) {
             alert(`✅ Subscription vault created! Vault ID: ${result.vaultId}`);
@@ -201,6 +208,84 @@ const CreateSubscriptionForm = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-md"
                             required
                         />
+                    </div>
+
+                    {/* Entitlement Settings */}
+                    <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+                        <h4 className="font-semibold text-gray-800 mb-3">🔐 Provider Withdrawal Entitlement</h4>
+                        
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Entitlement Type
+                            </label>
+                            <select
+                                value={entitlementType}
+                                onChange={(e) => setEntitlementType(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            >
+                                <option value="dynamic">Dynamic - Grows with usage</option>
+                                <option value="fixed">Fixed - Maximum limit set by you</option>
+                            </select>
+                            <p className="text-xs text-gray-600 mt-1">
+                                {entitlementType === 'fixed' 
+                                    ? 'Provider can never withdraw more than your set limit, regardless of usage'
+                                    : 'Provider withdrawal limit increases with verified usage from Flare oracle'
+                                }
+                            </p>
+                        </div>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Initial Withdrawal Limit (FLOW)
+                            </label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                value={withdrawLimit}
+                                onChange={(e) => setWithdrawLimit(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                required
+                            />
+                            <p className="text-xs text-gray-600 mt-1">
+                                {entitlementType === 'fixed' 
+                                    ? 'Maximum amount provider can ever withdraw from your vault'
+                                    : 'Initial limit - will increase as you use the API'
+                                }
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Expiration Time
+                                </label>
+                                <input
+                                    type="number"
+                                    value={expirationAmount}
+                                    onChange={(e) => setExpirationAmount(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    min="1"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Time Unit
+                                </label>
+                                <select
+                                    value={expirationUnit}
+                                    onChange={(e) => setExpirationUnit(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                >
+                                    <option value="hours">Hours</option>
+                                    <option value="days">Days</option>
+                                    <option value="months">Months</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p className="text-xs text-gray-600 mt-1">
+                            Entitlement expires in {expirationAmount} {expirationUnit}. You can always create a new subscription to renew.
+                        </p>
                     </div>
 
                     <div className="bg-blue-50 rounded-lg p-4 mb-4">
