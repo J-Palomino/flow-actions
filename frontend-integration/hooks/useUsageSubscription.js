@@ -188,7 +188,7 @@ export const useUsageSubscription = () => {
     const [txDetails, setTxDetails] = useState(null);
 
     // Monitor transaction status
-    const monitorTransaction = useCallback(async (txId) => {
+    const monitorTransaction = useCallback((txId) => {
         try {
             // Subscribe to transaction status updates
             const unsub = fcl.tx(txId).subscribe((transaction) => {
@@ -215,6 +215,7 @@ export const useUsageSubscription = () => {
         } catch (err) {
             console.error('Error monitoring transaction:', err);
             setError(err.message);
+            return null;
         }
     }, []);
 
@@ -266,6 +267,8 @@ export const useUsageSubscription = () => {
             });
 
             console.log('⏳ Monitoring REAL transaction:', txId);
+            
+            // Monitor transaction status (this sets up state updates)
             const unsub = monitorTransaction(txId);
             
             // Wait for transaction to be sealed
@@ -349,7 +352,13 @@ export const useUsageSubscription = () => {
             localStorage.setItem('subscriptions', JSON.stringify(globalSubscriptions));
             
             // Clean up transaction monitor
-            if (unsub) unsub();
+            if (unsub && typeof unsub === 'function') {
+                try {
+                    unsub();
+                } catch (cleanupErr) {
+                    console.warn('Failed to cleanup transaction monitor:', cleanupErr.message);
+                }
+            }
             
             return {
                 success: true,
@@ -402,7 +411,10 @@ export const useUsageSubscription = () => {
             });
 
             console.log('⏳ Monitoring top-up transaction:', txId);
+            
+            // Monitor transaction status (this sets up state updates)
             const unsub = monitorTransaction(txId);
+            
             const transaction = await fcl.tx(txId).onceSealed();
             
             if (transaction.status !== 4) {
@@ -412,7 +424,13 @@ export const useUsageSubscription = () => {
             console.log(`✅ Successfully topped up vault ${vaultId} with ${amount} FLOW`);
             
             // Clean up transaction monitor
-            if (unsub) unsub();
+            if (unsub && typeof unsub === 'function') {
+                try {
+                    unsub();
+                } catch (cleanupErr) {
+                    console.warn('Failed to cleanup transaction monitor:', cleanupErr.message);
+                }
+            }
             
             return {
                 success: true,
