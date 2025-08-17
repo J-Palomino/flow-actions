@@ -1,7 +1,58 @@
+# Flow CLI and binaries
 flow-cli.exe
 flow-cli.zip
-# flow
-imports
-.env
+imports/
+
+# Private keys and sensitive files
 *.pkey
 main.pkey
+privatekeys/
+.env
+.env.local
+.env.production
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js build output
+.next/
+out/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Flow state
+.flowconfig
+flow-typed/
+
+# Test coverage
+coverage/
+
+# Build artifacts
+dist/
+build/

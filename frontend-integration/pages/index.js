@@ -24,10 +24,18 @@ export default function Home() {
                                 The premier platform for LiteLLM API key management with Flare oracle integration, 
                                 Flow blockchain billing, and real-time usage analytics.
                             </p>
-                            <div className="flex justify-center space-x-6 text-sm">
+                            <div className="flex justify-center space-x-6 text-sm mb-6">
                                 <span className="bg-orange-600 px-3 py-1 rounded">🔥 Flare Oracle</span>
                                 <span className="bg-blue-600 px-3 py-1 rounded">⚡ Flow Blockchain</span>
                                 <span className="bg-purple-600 px-3 py-1 rounded">🔑 LiteLLM Keys</span>
+                            </div>
+                            <div className="flex justify-center">
+                                <a 
+                                    href="/how-it-works" 
+                                    className="inline-flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
+                                >
+                                    🔧 How It Works & Public Contracts →
+                                </a>
                             </div>
                         </div>
                     </div>
