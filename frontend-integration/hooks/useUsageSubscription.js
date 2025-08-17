@@ -391,7 +391,8 @@ export const useUsageSubscription = () => {
             const litellmKey = await litellmKeyService.createSubscriptionKey(
                 vaultId,
                 userAddress,
-                providerAddress
+                providerAddress,
+                selectedModels
             );
             
             console.log('✅ REAL subscription vault funded and LiteLLM key created');
@@ -408,6 +409,11 @@ export const useUsageSubscription = () => {
                 litellmKey: litellmKey.key,
                 keyName: litellmKey.key_name,
                 maxBudget: litellmKey.max_budget,
+                selectedModels: selectedModels,
+                entitlementType: entitlementType,
+                withdrawLimit: withdrawLimit,
+                expirationAmount: expirationAmount,
+                expirationUnit: expirationUnit,
                 createdAt: new Date().toISOString(),
                 status: 'active',
                 txId: txId,
