@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import litellmKeyService from '../services/litellmKeyService';
 
-const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
+const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [usageData, setUsageData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -133,7 +133,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
             {showDetails && usageData && (
                 <div className="detailed-usage">
                     <div className="api-key-section">
-                        <h4>🔑 LiteLLM API Key</h4>
+                        <h4>🔑 Your LiteLLM API Key</h4>
                         <div className="api-key-display">
                             <code className="api-key">
                                 {showApiKey ? subscription.litellmKey : subscription.litellmKey?.replace(/sk-(.+)/, 'sk-' + '•'.repeat(20))}
@@ -143,19 +143,114 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
                                     onClick={() => setShowApiKey(!showApiKey)}
                                     className="toggle-key-button"
                                 >
-                                    {showApiKey ? '👁️‍🗨️ Hide' : '👁️ Show'}
+                                    {showApiKey ? '👁️‍🗨️ Hide' : '👁️ Show Key'}
                                 </button>
                                 <button 
                                     onClick={() => copyToClipboard(subscription.litellmKey)}
                                     className="copy-button"
                                 >
-                                    📋 Copy
+                                    📋 Copy Key
                                 </button>
                             </div>
                         </div>
                         <div className="key-info">
                             <span>Budget: ${subscription.maxBudget || 100}/month</span>
                             <span>Spent: {formatCurrency(usageData.usage_summary?.total_cost)}</span>
+                            <span>Status: 🟢 Active</span>
+                        </div>
+                        
+                        <div className="usage-instructions">
+                            <h5>🚀 How to Use Your API Key</h5>
+                            <div className="endpoint-info">
+                                <div className="endpoint-label">OpenAI-Compatible Endpoint:</div>
+                                <div className="endpoint-url">
+                                    <code>https://llm.p10p.io</code>
+                                    <button 
+                                        onClick={() => copyToClipboard('https://llm.p10p.io')}
+                                        className="copy-endpoint-button"
+                                    >
+                                        📋
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="code-examples">
+                                <div className="example-section">
+                                    <div className="example-title">🐍 Python (OpenAI Client)</div>
+                                    <code className="code-block">
+{`from openai import OpenAI
+
+client = OpenAI(
+    api_key="${subscription.litellmKey}",
+    base_url="https://llm.p10p.io"
+)
+
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": "Hello!"}]
+)`}
+                                    </code>
+                                    <button 
+                                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    api_key="${subscription.litellmKey}",\n    base_url="https://llm.p10p.io"\n)\n\nresponse = client.chat.completions.create(\n    model="gpt-3.5-turbo",\n    messages=[{"role": "user", "content": "Hello!"}]\n)`)}
+                                        className="copy-code-button"
+                                    >
+                                        📋 Copy Code
+                                    </button>
+                                </div>
+                                
+                                <div className="example-section">
+                                    <div className="example-title">🌐 cURL</div>
+                                    <code className="code-block">
+{`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\
+  -H "Authorization: Bearer ${subscription.litellmKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'`}
+                                    </code>
+                                    <button 
+                                        onClick={() => copyToClipboard(`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\\n  -H "Authorization: Bearer ${subscription.litellmKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "gpt-3.5-turbo",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`)}
+                                        className="copy-code-button"
+                                    >
+                                        📋 Copy cURL
+                                    </button>
+                                </div>
+                                
+                                <div className="example-section">
+                                    <div className="example-title">🔗 JavaScript (fetch)</div>
+                                    <code className="code-block">
+{`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${subscription.litellmKey}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: 'gpt-3.5-turbo',
+    messages: [{role: 'user', content: 'Hello!'}]
+  })
+});`}
+                                    </code>
+                                    <button 
+                                        onClick={() => copyToClipboard(`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Authorization': 'Bearer ${subscription.litellmKey}',\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    model: 'gpt-3.5-turbo',\n    messages: [{role: 'user', content: 'Hello!'}]\n  })\n});`)}
+                                        className="copy-code-button"
+                                    >
+                                        📋 Copy JS
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="supported-models">
+                                <div className="models-title">🤖 Supported Models</div>
+                                <div className="models-list">
+                                    <span className="model-tag">gpt-3.5-turbo</span>
+                                    <span className="model-tag">gpt-4</span>
+                                    <span className="model-tag">gpt-4-turbo</span>
+                                    <span className="model-tag">claude-3-sonnet</span>
+                                    <span className="model-tag">llama-2-70b</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -201,6 +296,12 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
                             className="update-button"
                         >
                             ⚙️ Update Settings
+                        </button>
+                        <button 
+                            onClick={() => onTopUp && onTopUp(subscription)}
+                            className="topup-button"
+                        >
+                            💰 Add FLOW
                         </button>
                         <button 
                             onClick={fetchUsageData}
@@ -507,7 +608,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
                     flex-wrap: wrap;
                 }
 
-                .update-button, .refresh-button, .delete-button {
+                .update-button, .topup-button, .refresh-button, .delete-button {
                     padding: 8px 16px;
                     border: 1px solid #D1D5DB;
                     border-radius: 6px;
@@ -525,6 +626,16 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
 
                 .update-button:hover {
                     background: #2563EB;
+                }
+
+                .topup-button {
+                    background: #F59E0B;
+                    color: white;
+                    border-color: #F59E0B;
+                }
+
+                .topup-button:hover {
+                    background: #D97706;
                 }
 
                 .refresh-button {
@@ -545,6 +656,152 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
 
                 .delete-button:hover {
                     background: #B91C1C;
+                }
+
+                /* Usage Instructions Styles */
+                .usage-instructions {
+                    margin-top: 20px;
+                    padding: 20px;
+                    background: #F8FAFC;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 8px;
+                }
+
+                .usage-instructions h5 {
+                    margin: 0 0 16px 0;
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: #1E40AF;
+                }
+
+                .endpoint-info {
+                    margin-bottom: 20px;
+                    padding: 12px;
+                    background: white;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 6px;
+                }
+
+                .endpoint-label {
+                    font-weight: 600;
+                    color: #374151;
+                    margin-bottom: 8px;
+                }
+
+                .endpoint-url {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .endpoint-url code {
+                    flex: 1;
+                    padding: 8px 12px;
+                    background: #F3F4F6;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 4px;
+                    font-family: 'Monaco', 'Menlo', monospace;
+                    font-size: 14px;
+                }
+
+                .copy-endpoint-button {
+                    padding: 6px 8px;
+                    background: #3B82F6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                }
+
+                .copy-endpoint-button:hover {
+                    background: #2563EB;
+                }
+
+                .code-examples {
+                    margin-bottom: 20px;
+                }
+
+                .example-section {
+                    margin-bottom: 16px;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 6px;
+                    overflow: hidden;
+                }
+
+                .example-title {
+                    padding: 8px 12px;
+                    background: #E5E7EB;
+                    font-weight: 600;
+                    font-size: 14px;
+                    color: #374151;
+                    border-bottom: 1px solid #D1D5DB;
+                }
+
+                .code-block {
+                    display: block;
+                    padding: 12px;
+                    background: #1F2937;
+                    color: #F9FAFB;
+                    font-family: 'Monaco', 'Menlo', monospace;
+                    font-size: 12px;
+                    line-height: 1.4;
+                    white-space: pre-wrap;
+                    word-wrap: break-word;
+                    margin: 0;
+                    overflow-x: auto;
+                }
+
+                .copy-code-button {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    padding: 4px 8px;
+                    background: #059669;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 11px;
+                    opacity: 0.8;
+                }
+
+                .copy-code-button:hover {
+                    opacity: 1;
+                    background: #047857;
+                }
+
+                .example-section {
+                    position: relative;
+                }
+
+                .supported-models {
+                    padding: 12px;
+                    background: white;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 6px;
+                }
+
+                .models-title {
+                    font-weight: 600;
+                    color: #374151;
+                    margin-bottom: 12px;
+                }
+
+                .models-list {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                }
+
+                .model-tag {
+                    padding: 4px 8px;
+                    background: #EBF4FF;
+                    color: #1E40AF;
+                    border: 1px solid #BFDBFE;
+                    border-radius: 12px;
+                    font-size: 12px;
+                    font-weight: 500;
                 }
 
                 @media (max-width: 768px) {
@@ -572,8 +829,25 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete }) => {
                         flex-direction: column;
                     }
 
-                    .update-button, .refresh-button, .delete-button {
+                    .update-button, .topup-button, .refresh-button, .delete-button {
                         width: 100%;
+                    }
+
+                    .endpoint-url {
+                        flex-direction: column;
+                        align-items: stretch;
+                    }
+
+                    .code-block {
+                        font-size: 11px;
+                    }
+
+                    .models-list {
+                        justify-content: center;
+                    }
+
+                    .usage-instructions {
+                        padding: 16px;
                     }
                 }
             `}</style>

@@ -69,20 +69,29 @@ import FlowToken from ${CONTRACTS.FlowToken}
 import FungibleToken from ${CONTRACTS.FungibleToken}
 import SimpleUsageSubscriptions from ${CONTRACTS.SimpleUsageSubscriptions}
 
-transaction(amount: UFix64) {
+transaction(amount: UFix64, vaultIdentifier: String) {
     prepare(customer: auth(BorrowValue, Storage) &Account) {
-        let vaultRef = customer.storage.borrow<&SimpleUsageSubscriptions.SubscriptionVault>(
-            from: SimpleUsageSubscriptions.VaultStoragePath
-        ) ?? panic("No subscription vault found")
+        // Use the unique storage path for this specific subscription vault
+        let uniqueStoragePath = StoragePath(identifier: "SubscriptionVault_".concat(vaultIdentifier))!
         
+        let vaultRef = customer.storage.borrow<&SimpleUsageSubscriptions.SubscriptionVault>(
+            from: uniqueStoragePath
+        ) ?? panic("No subscription vault found at path: ".concat(uniqueStoragePath.toString()))
+        
+        // Check user has sufficient FLOW balance
         let flowVault = customer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(
             from: /storage/flowTokenVault
-        ) ?? panic("Could not borrow Flow vault")
+        ) ?? panic("Could not borrow Flow vault - ensure wallet is connected")
         
+        if flowVault.balance < amount {
+            panic("Insufficient FLOW balance. Required: ".concat(amount.toString()).concat(", Available: ").concat(flowVault.balance.toString()))
+        }
+        
+        // Withdraw from user's connected wallet and add to subscription vault
         let deposit <- flowVault.withdraw(amount: amount)
         vaultRef.deposit(from: <- deposit)
         
-        log("Added ".concat(amount.toString()).concat(" FLOW to subscription"))
+        log("Added ".concat(amount.toString()).concat(" FLOW from user wallet to subscription vault ").concat(vaultRef.id.toString()))
     }
 }`;
 
@@ -367,34 +376,61 @@ export const useUsageSubscription = () => {
         }
     };
 
-    // Top up subscription
-    const topUpSubscription = async (amount) => {
+    // Top up specific subscription vault - PRESERVING FUNCTIONALITY
+    const topUpSubscription = async (amount, vaultIdentifier, vaultId) => {
+        if (!vaultIdentifier) {
+            throw new Error('Vault identifier is required for top-up');
+        }
+
         setIsLoading(true);
         setError(null);
         setTxStatus(TX_STATUS.PENDING);
 
         try {
+            console.log(`💰 Topping up subscription vault ${vaultId} with ${amount} FLOW from user wallet...`);
+            
             const txId = await fcl.mutate({
                 cadence: TOP_UP_SUBSCRIPTION,
                 args: (arg, t) => [
-                    arg(amount.toFixed(8), t.UFix64)
+                    arg(amount.toFixed(8), t.UFix64),
+                    arg(vaultIdentifier, t.String)
                 ],
-                limit: 9999
+                limit: 9999,
+                proposer: fcl.authz,
+                payer: fcl.authz,
+                authorizations: [fcl.authz]
             });
 
-            await monitorTransaction(txId);
+            console.log('⏳ Monitoring top-up transaction:', txId);
+            const unsub = monitorTransaction(txId);
             const transaction = await fcl.tx(txId).onceSealed();
             
+            if (transaction.status !== 4) {
+                throw new Error(`Top-up transaction failed with status ${transaction.status}: ${transaction.errorMessage || 'Unknown error'}`);
+            }
+
+            console.log(`✅ Successfully topped up vault ${vaultId} with ${amount} FLOW`);
+            
+            // Clean up transaction monitor
+            if (unsub) unsub();
+            
             return {
-                success: transaction.status === 4,
+                success: true,
                 txId,
-                explorerUrl: `https://www.flowdiver.io/tx/${txId}`
+                vaultId,
+                amount,
+                explorerUrl: `https://www.flowdiver.io/tx/${txId}`,
+                message: `Added ${amount} FLOW from your wallet to subscription vault ${vaultId}`
             };
         } catch (err) {
-            console.error('Error topping up subscription:', err);
+            console.error('❌ Error topping up subscription:', err);
             setError(err.message);
             setTxStatus(TX_STATUS.ERROR);
-            return { success: false, error: err.message };
+            return { 
+                success: false, 
+                error: err.message,
+                vaultId
+            };
         } finally {
             setIsLoading(false);
         }

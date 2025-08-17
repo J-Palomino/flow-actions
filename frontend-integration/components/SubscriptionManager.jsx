@@ -9,6 +9,7 @@ import AdminPricingControls from './AdminPricingControls';
 const SubscriptionManager = () => {
     const {
         createSubscriptionVault,
+        topUpSubscription,
         getUserSubscriptions,
         updateSubscription,
         deleteSubscription,
@@ -100,6 +101,48 @@ const SubscriptionManager = () => {
             await loadUserData(); // Refresh subscriptions
         } catch (err) {
             alert(`❌ Failed to delete subscription: ${err.message}`);
+        }
+    };
+
+    const handleTopUpSubscription = async (subscription) => {
+        if (!user?.addr) {
+            alert('Please connect your wallet first');
+            return;
+        }
+
+        const topUpAmount = prompt(`Top up subscription vault ${subscription.vaultId}\n\nHow much FLOW would you like to add?\n\nCurrent balance: ${subscription.balance || 0} FLOW\nYour wallet balance: ${flowBalance?.toFixed(4) || '...'} FLOW`, '5.0');
+        
+        if (!topUpAmount || isNaN(parseFloat(topUpAmount))) {
+            return;
+        }
+
+        const amount = parseFloat(topUpAmount);
+        if (amount <= 0) {
+            alert('Amount must be greater than 0');
+            return;
+        }
+
+        if (flowBalance !== null && flowBalance < amount) {
+            alert(`Insufficient FLOW balance!\n\nRequired: ${amount} FLOW\nAvailable: ${flowBalance.toFixed(4)} FLOW`);
+            return;
+        }
+
+        if (!subscription.vaultIdentifier) {
+            alert('Cannot top up: Missing vault identifier. This subscription may be from an older version.');
+            return;
+        }
+
+        try {
+            const result = await topUpSubscription(amount, subscription.vaultIdentifier, subscription.vaultId);
+            
+            if (result.success) {
+                alert(`✅ Top-up successful!\n\nAdded ${amount} FLOW to vault ${subscription.vaultId}\nFunded from your connected wallet\n\nView transaction: ${result.explorerUrl}`);
+                await loadUserData(); // Refresh subscriptions and balance
+            } else {
+                alert(`❌ Top-up failed:\n\n${result.error}`);
+            }
+        } catch (err) {
+            alert(`❌ Top-up failed: ${err.message}`);
         }
     };
 
@@ -199,6 +242,12 @@ const SubscriptionManager = () => {
                 >
                     ➕ Create New
                 </button>
+                <button 
+                    onClick={() => setActiveTab('help')}
+                    className={`tab-button ${activeTab === 'help' ? 'active' : ''}`}
+                >
+                    📚 API Usage Guide
+                </button>
                 {user?.addr === '0x6daee039a7b9c2f0' && (
                     <button 
                         onClick={() => setActiveTab('admin')}
@@ -226,6 +275,7 @@ const SubscriptionManager = () => {
                                             key={subscription.vaultId}
                                             subscription={subscription}
                                             onUpdate={handleUpdateSubscription}
+                                            onTopUp={handleTopUpSubscription}
                                             onDelete={handleDeleteSubscription}
                                         />
                                     ))}
@@ -302,6 +352,120 @@ const SubscriptionManager = () => {
                                     <li>✅ Flow blockchain security and transparency</li>
                                     <li>✅ Individual usage analytics and controls</li>
                                     <li>✅ Automatic cost optimization based on usage tiers</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'help' && (
+                    <div className="help-section">
+                        <h2>📚 API Usage Guide</h2>
+                        <p>Learn how to use your FlareFlow.link API keys with the OpenAI-compatible endpoint.</p>
+                        
+                        <div className="help-content">
+                            <div className="help-card">
+                                <h3>🌐 Endpoint Information</h3>
+                                <div className="endpoint-details">
+                                    <div className="endpoint-row">
+                                        <strong>Base URL:</strong>
+                                        <code className="endpoint-code">https://llm.p10p.io</code>
+                                        <button onClick={() => navigator.clipboard.writeText('https://llm.p10p.io')} className="mini-copy-btn">📋</button>
+                                    </div>
+                                    <div className="endpoint-row">
+                                        <strong>Chat Completions:</strong>
+                                        <code className="endpoint-code">https://llm.p10p.io/v1/chat/completions</code>
+                                        <button onClick={() => navigator.clipboard.writeText('https://llm.p10p.io/v1/chat/completions')} className="mini-copy-btn">📋</button>
+                                    </div>
+                                    <div className="endpoint-row">
+                                        <strong>Embeddings:</strong>
+                                        <code className="endpoint-code">https://llm.p10p.io/v1/embeddings</code>
+                                        <button onClick={() => navigator.clipboard.writeText('https://llm.p10p.io/v1/embeddings')} className="mini-copy-btn">📋</button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="help-card">
+                                <h3>🚀 Quick Start</h3>
+                                <ol className="help-steps">
+                                    <li>Create a new subscription to get your unique API key</li>
+                                    <li>Fund your subscription vault with FLOW tokens</li>
+                                    <li>Copy your API key from the subscription tile</li>
+                                    <li>Use the key with any OpenAI-compatible client</li>
+                                    <li>Monitor usage and costs in real-time</li>
+                                </ol>
+                            </div>
+                            
+                            <div className="help-card">
+                                <h3>🐍 Python Example</h3>
+                                <div className="code-example">
+                                    <code className="help-code-block">
+{`# Install the OpenAI library
+pip install openai
+
+# Use with FlareFlow.link
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="your-flareflow-api-key",
+    base_url="https://llm.p10p.io"
+)
+
+# Make a request
+response = client.chat.completions.create(
+    model="gpt-3.5-turbo",
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ]
+)
+
+print(response.choices[0].message.content)`}
+                                    </code>
+                                    <button 
+                                        onClick={() => navigator.clipboard.writeText('from openai import OpenAI\n\nclient = OpenAI(\n    api_key="your-flareflow-api-key",\n    base_url="https://llm.p10p.io"\n)\n\nresponse = client.chat.completions.create(\n    model="gpt-3.5-turbo",\n    messages=[{"role": "user", "content": "Hello!"}]\n)')}
+                                        className="copy-help-code"
+                                    >
+                                        📋 Copy Code
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="help-card">
+                                <h3>🤖 Supported Models</h3>
+                                <div className="help-models">
+                                    <div className="model-category">
+                                        <strong>OpenAI Models:</strong>
+                                        <div className="model-tags">
+                                            <span className="help-model-tag">gpt-3.5-turbo</span>
+                                            <span className="help-model-tag">gpt-4</span>
+                                            <span className="help-model-tag">gpt-4-turbo</span>
+                                        </div>
+                                    </div>
+                                    <div className="model-category">
+                                        <strong>Anthropic Models:</strong>
+                                        <div className="model-tags">
+                                            <span className="help-model-tag">claude-3-sonnet</span>
+                                            <span className="help-model-tag">claude-3-haiku</span>
+                                        </div>
+                                    </div>
+                                    <div className="model-category">
+                                        <strong>Open Source:</strong>
+                                        <div className="model-tags">
+                                            <span className="help-model-tag">llama-2-70b</span>
+                                            <span className="help-model-tag">mixtral-8x7b</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="help-card">
+                                <h3>💰 Billing & Usage</h3>
+                                <ul className="help-billing">
+                                    <li><strong>Pay-as-you-go:</strong> Only pay for tokens you actually use</li>
+                                    <li><strong>Real-time tracking:</strong> Monitor costs and usage live</li>
+                                    <li><strong>Flow blockchain:</strong> Transparent, immutable billing</li>
+                                    <li><strong>Top-up anytime:</strong> Add FLOW tokens to your subscription vault</li>
+                                    <li><strong>Budget controls:</strong> Set spending limits per API key</li>
                                 </ul>
                             </div>
                         </div>
@@ -690,6 +854,165 @@ const SubscriptionManager = () => {
                     color: #DC2626;
                 }
 
+                /* Help Section Styles */
+                .help-section {
+                    background: white;
+                    border: 1px solid #E5E7EB;
+                    border-radius: 12px;
+                    padding: 24px;
+                }
+
+                .help-section h2 {
+                    margin: 0 0 8px 0;
+                    font-size: 24px;
+                    font-weight: 600;
+                    color: #111827;
+                }
+
+                .help-section > p {
+                    margin: 0 0 24px 0;
+                    color: #6B7280;
+                    font-size: 16px;
+                }
+
+                .help-content {
+                    display: grid;
+                    gap: 20px;
+                }
+
+                .help-card {
+                    background: #F8FAFC;
+                    border: 1px solid #E2E8F0;
+                    border-radius: 8px;
+                    padding: 20px;
+                }
+
+                .help-card h3 {
+                    margin: 0 0 16px 0;
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: #1E40AF;
+                }
+
+                .endpoint-details {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                }
+
+                .endpoint-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                }
+
+                .endpoint-code {
+                    flex: 1;
+                    padding: 8px 12px;
+                    background: white;
+                    border: 1px solid #D1D5DB;
+                    border-radius: 4px;
+                    font-family: 'Monaco', monospace;
+                    font-size: 14px;
+                }
+
+                .mini-copy-btn {
+                    padding: 4px 8px;
+                    background: #3B82F6;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                }
+
+                .mini-copy-btn:hover {
+                    background: #2563EB;
+                }
+
+                .help-steps {
+                    margin: 0;
+                    padding-left: 20px;
+                    color: #374151;
+                }
+
+                .help-steps li {
+                    margin-bottom: 8px;
+                }
+
+                .code-example {
+                    position: relative;
+                    margin-top: 12px;
+                }
+
+                .help-code-block {
+                    display: block;
+                    padding: 16px;
+                    background: #1F2937;
+                    color: #F9FAFB;
+                    border-radius: 6px;
+                    font-family: 'Monaco', monospace;
+                    font-size: 13px;
+                    line-height: 1.4;
+                    white-space: pre-wrap;
+                    overflow-x: auto;
+                }
+
+                .copy-help-code {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    padding: 6px 12px;
+                    background: #059669;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 12px;
+                }
+
+                .copy-help-code:hover {
+                    background: #047857;
+                }
+
+                .help-models {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }
+
+                .model-category {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+
+                .model-tags {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                }
+
+                .help-model-tag {
+                    padding: 6px 12px;
+                    background: #EBF4FF;
+                    color: #1E40AF;
+                    border: 1px solid #BFDBFE;
+                    border-radius: 16px;
+                    font-size: 13px;
+                    font-weight: 500;
+                }
+
+                .help-billing {
+                    margin: 0;
+                    padding-left: 20px;
+                    color: #374151;
+                }
+
+                .help-billing li {
+                    margin-bottom: 8px;
+                }
+
                 @media (max-width: 768px) {
                     .manager-header h1 {
                         font-size: 24px;
@@ -723,6 +1046,24 @@ const SubscriptionManager = () => {
 
                     .tab-button.admin-tab.active {
                         border-left-color: #DC2626;
+                    }
+
+                    .endpoint-row {
+                        flex-direction: column;
+                        align-items: stretch;
+                        gap: 8px;
+                    }
+
+                    .help-code-block {
+                        font-size: 11px;
+                    }
+
+                    .help-models {
+                        gap: 12px;
+                    }
+
+                    .model-tags {
+                        justify-content: center;
                     }
                 }
             `}</style>

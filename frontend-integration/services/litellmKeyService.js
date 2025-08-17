@@ -18,6 +18,7 @@ class LiteLLMKeyService {
 
     /**
      * Create a new LiteLLM API key for a subscription - REAL API CALL
+     * Ensures 1 Subscription -> 1 Unique LiteLLM Key -> Independent Usage Tracking
      */
     async createSubscriptionKey(vaultId, customerAddress, providerAddress) {
         if (!vaultId || !customerAddress || !providerAddress) {
@@ -25,28 +26,45 @@ class LiteLLMKeyService {
         }
 
         try {
-            console.log('🔑 Creating REAL LiteLLM API key for vault:', vaultId);
+            console.log('🔑 Creating UNIQUE REAL LiteLLM API key for independent vault:', vaultId);
+            
+            // Generate unique identifier to ensure complete independence
+            const timestamp = Date.now();
+            const randomSuffix = Math.random().toString(36).substring(2, 9);
+            const uniqueKeyName = `flareflow_vault_${vaultId}_${customerAddress.slice(2, 8)}_${timestamp}_${randomSuffix}`;
             
             const keyData = {
-                key_name: `flareflow_vault_${vaultId}_${customerAddress.slice(2, 8)}`,
-                user_id: customerAddress,
+                key_name: uniqueKeyName,
+                user_id: `${customerAddress}_vault_${vaultId}`, // Unique user ID per vault for independent tracking
                 metadata: {
                     vaultId: vaultId,
                     customer: customerAddress,
                     provider: providerAddress,
                     createdAt: new Date().toISOString(),
                     type: 'flareflow_subscription',
-                    platform: 'FlareFlow.link'
+                    platform: 'FlareFlow.link',
+                    uniqueIdentifier: `vault_${vaultId}_${timestamp}`,
+                    independentTracking: true,
+                    subscriptionModel: '1vault_1key_1dataset'
                 },
                 max_budget: 100.0,
                 budget_duration: '30d',
-                models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet', 'llama-2-70b'],
+                models: ['gpt-3.5-turbo', 'gpt-4', 'claude-3-sonnet', 'llama-2-70b', 'gpt-4-turbo'],
                 permissions: {
                     chat_completions: true,
                     embeddings: true,
-                    moderations: true
+                    moderations: true,
+                    completions: true
+                },
+                // Ensure independent rate limiting per vault
+                rate_limit: {
+                    requests_per_minute: 100,
+                    tokens_per_minute: 50000
                 }
             };
+
+            console.log(`   Creating key with unique name: ${uniqueKeyName}`);
+            console.log(`   Independent user ID: ${keyData.user_id}`);
 
             const response = await axios.post(`${this.baseURL}/key/generate`, keyData, {
                 headers: {
@@ -60,15 +78,26 @@ class LiteLLMKeyService {
                 throw new Error('Invalid response from LiteLLM API - no key returned');
             }
 
-            console.log('✅ REAL LiteLLM key created successfully');
+            console.log('✅ UNIQUE REAL LiteLLM key created successfully for independent usage tracking');
             console.log('   Key ID:', response.data.key.slice(0, 20) + '...');
             console.log('   Vault:', vaultId);
             console.log('   User:', customerAddress);
+            console.log('   Independent tracking enabled: YES');
+            console.log('   Key name:', uniqueKeyName);
 
-            return response.data;
+            // Add additional metadata to response
+            return {
+                ...response.data,
+                vaultId: vaultId,
+                customerAddress: customerAddress,
+                providerAddress: providerAddress,
+                uniqueKeyName: uniqueKeyName,
+                independentTracking: true,
+                createdAt: new Date().toISOString()
+            };
 
         } catch (error) {
-            console.error('❌ REAL LiteLLM key creation failed:', error.message);
+            console.error('❌ REAL LiteLLM unique key creation failed:', error.message);
             
             if (error.response) {
                 console.error('   Status:', error.response.status);
@@ -80,7 +109,7 @@ class LiteLLMKeyService {
                 throw new Error(`Cannot connect to LiteLLM at ${this.baseURL} - check URL and network connectivity`);
             }
             
-            throw new Error(`LiteLLM key creation failed: ${error.message}`);
+            throw new Error(`LiteLLM unique key creation failed: ${error.message}`);
         }
     }
 
