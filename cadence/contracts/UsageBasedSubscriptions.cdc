@@ -174,12 +174,12 @@ access(all) contract UsageBasedSubscriptions {
             let newRequests = usage.apiCalls > self.lastPaidRequests ? usage.apiCalls - self.lastPaidRequests : 0
             
             log("📊 Processing differential usage:")
-            log("   Total tokens: " + usage.totalTokens.toString() + " (+" + newTokens.toString() + " new)")
-            log("   Total requests: " + usage.apiCalls.toString() + " (+" + newRequests.toString() + " new)")
-            log("   Last paid tokens: " + self.lastPaidTokens.toString())
+            log("   Total tokens: ".concat(usage.totalTokens.toString()).concat(" (+").concat(newTokens.toString()).concat(" new)"))
+            log("   Total requests: ".concat(usage.apiCalls.toString()).concat(" (+").concat(newRequests.toString()).concat(" new)"))
+            log("   Last paid tokens: ".concat(self.lastPaidTokens.toString()))
             
             // Only process payment if there's NEW usage
-            if newTokens > 0 || newRequests > 0 {
+            if UInt64(newTokens) > 0 || UInt64(newRequests) > 0 {
                 // Update pricing tier based on TOTAL usage
                 let newTier = UsageBasedSubscriptions.calculateTier(usage.totalTokens)
                 if newTier.name != self.currentTier.name {
@@ -195,8 +195,8 @@ access(all) contract UsageBasedSubscriptions {
                 let newUsageReport = UsageReport(
                     timestamp: usage.timestamp,
                     period: usage.period,
-                    totalTokens: newTokens,
-                    apiCalls: newRequests,
+                    totalTokens: UInt64(newTokens),
+                    apiCalls: UInt64(newRequests),
                     models: usage.models,
                     costEstimate: 0.0, // Will be calculated
                     metadata: usage.metadata
@@ -277,11 +277,10 @@ access(all) contract UsageBasedSubscriptions {
         
         /// Provider withdraws based on entitlement
         access(all) fun withdrawWithEntitlement(amount: UFix64): @{FungibleToken.Vault} {
-            pre {
-                amount <= self.entitlement.getRemainingAllowance():
-                    "Amount exceeds entitlement allowance"
-                amount <= self.vault.balance:
-                    "Insufficient vault balance"
+            // Check entitlement allowance
+            let remainingAllowance = self.entitlement.getRemainingAllowance()
+            assert(amount <= remainingAllowance, message: "Amount exceeds entitlement allowance")
+            assert(amount <= self.vault.balance, message: "Insufficient vault balance")
             }
             
             let payment <- self.vault.withdraw(amount: amount)
@@ -307,22 +306,22 @@ access(all) contract UsageBasedSubscriptions {
             // Check if vault has sufficient balance
             if self.vault.balance < newUsageAmount {
                 log("⚠️ Insufficient vault balance for automatic payment")
-                log("   Required: " + newUsageAmount.toString() + " FLOW")
-                log("   Available: " + self.vault.balance.toString() + " FLOW")
+                log("   Required: ".concat(newUsageAmount.toString()).concat(" FLOW"))
+                log("   Available: ".concat(self.vault.balance.toString()).concat(" FLOW"))
                 return
             }
             
             // Check monthly spending limits
             if self.totalPaidAmount + newUsageAmount > self.maxMonthlySpend {
                 log("⚠️ Monthly spending limit exceeded, skipping automatic payment")
-                log("   Would exceed limit by: " + (self.totalPaidAmount + newUsageAmount - self.maxMonthlySpend).toString() + " FLOW")
+                log("   Would exceed limit by: ".concat((self.totalPaidAmount + newUsageAmount - self.maxMonthlySpend).toString()).concat(" FLOW"))
                 return
             }
             
             // Process automatic payment
             log("💰 Processing automatic payment:")
-            log("   Amount: " + newUsageAmount.toString() + " FLOW")
-            log("   Provider: " + self.provider.toString())
+            log("   Amount: ".concat(newUsageAmount.toString()).concat(" FLOW"))
+            log("   Provider: ".concat(self.provider.toString()))
             
             // Transfer funds directly to provider
             let payment <- self.vault.withdraw(amount: newUsageAmount)
@@ -371,6 +370,33 @@ access(all) contract UsageBasedSubscriptions {
                 "usageMultiplier": self.usageMultiplier,
                 "currentPrice": self.currentPrice,
                 "remainingEntitlement": self.entitlement.getRemainingAllowance()
+            }
+        }
+        
+        /// Get complete vault information for UI display
+        access(all) fun getVaultInfo(): {String: AnyStruct} {
+            return {
+                "vaultId": self.id,
+                "owner": self.owner,
+                "provider": self.provider,
+                "serviceName": self.serviceName,
+                "balance": self.vault.balance,
+                "selectedModels": self.selectedModels,
+                "modelPricing": self.modelPricing,
+                "entitlementType": self.entitlement.entitlementType.rawValue,
+                "withdrawLimit": self.entitlement.withdrawLimit,
+                "usedAmount": self.entitlement.usedAmount,
+                "validUntil": self.entitlement.validUntil,
+                "isActive": self.entitlement.isActive,
+                "currentTier": self.currentTier.name,
+                "basePrice": self.basePrice,
+                "currentPrice": self.currentPrice,
+                "autoPay": self.autoPay,
+                "maxMonthlySpend": self.maxMonthlySpend,
+                "lastPaidTokens": self.lastPaidTokens,
+                "lastPaidRequests": self.lastPaidRequests,
+                "totalPaidAmount": self.totalPaidAmount,
+                "lastOracleUpdate": self.lastOracleUpdate
             }
         }
         
@@ -562,6 +588,29 @@ access(all) contract UsageBasedSubscriptions {
     access(all) fun borrowVault(owner: Address, vaultId: UInt64): &SubscriptionVault? {
         let account = getAccount(owner)
         return account.storage.borrow<&SubscriptionVault>(from: self.VaultStoragePath)
+    }
+    
+    /// Get all vault IDs for a user
+    access(all) fun getUserVaultIds(owner: Address): [UInt64] {
+        let vaultIds: [UInt64] = []
+        
+        for vaultId in self.vaultRegistry.keys {
+            if self.vaultRegistry[vaultId] == owner {
+                vaultIds.append(vaultId)
+            }
+        }
+        
+        return vaultIds
+    }
+    
+    /// Get vault information by vault ID
+    access(all) fun getVaultInfo(vaultId: UInt64): {String: AnyStruct}? {
+        if let ownerAddress = self.vaultRegistry[vaultId] {
+            if let vault = self.borrowVault(owner: ownerAddress, vaultId: vaultId) {
+                return vault.getVaultInfo()
+            }
+        }
+        return nil
     }
     
     /// Calculate pricing tier based on usage

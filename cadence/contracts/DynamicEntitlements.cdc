@@ -2,9 +2,33 @@ import "FungibleToken"
 import "FlowToken"
 import "FlareFDCTriggers"
 
-/// SimpleUsageSubscriptions: Simplified usage-based billing for LiteLLM
-/// Users connect to this contract to create vaults and grant payment entitlements
-access(all) contract SimpleUsageSubscriptions {
+/// DynamicEntitlements: Dynamic entitlements-based usage billing for LiteLLM
+/// Uses Cadence's entitlement system for secure, automated payment authorization
+access(all) contract DynamicEntitlements {
+    
+    /// Dynamic Entitlements for automated usage-based payments
+    access(all) entitlement UsageWithdraw
+    access(all) entitlement ProviderAccess
+    access(all) entitlement CustomerDeposit
+    access(all) entitlement AutomationTrigger
+    
+    /// Entitlement mappings for dynamic authorization
+    access(all) entitlement mapping ProviderEntitlements {
+        UsageWithdraw -> UsageWithdraw
+        ProviderAccess -> ProviderAccess
+        AutomationTrigger -> AutomationTrigger
+    }
+    
+    access(all) entitlement mapping CustomerEntitlements {
+        CustomerDeposit -> CustomerDeposit
+    }
+    
+    /// Interface for automated usage processing
+    access(all) resource interface AutomatedVault {
+        access(AutomationTrigger) fun automatedWithdraw(): @{FungibleToken.Vault}?
+        access(ProviderAccess) fun configureAutomation(enabled: Bool, maxAmount: UFix64)
+        access(all) fun getInfo(): {String: AnyStruct}
+    }
     
     /// Events
     access(all) event SubscriptionCreated(vaultId: UInt64, customer: Address, provider: Address)
@@ -52,25 +76,27 @@ access(all) contract SimpleUsageSubscriptions {
         }
     }
     
-    /// Subscription vault with usage-based pricing
-    access(all) resource SubscriptionVault {
+    /// Subscription vault with dynamic entitlements for automated usage-based payments
+    access(all) resource SubscriptionVault: AutomatedVault {
         access(all) let id: UInt64
         access(all) let customer: Address
         access(all) let provider: Address
         access(self) let vault: @{FungibleToken.Vault}
         
-        // Usage tracking
+        // Usage tracking with entitlement-based automation
         access(all) var lastUsage: UsageReport?
         access(all) var currentTier: PricingTier
         access(all) var currentPrice: UFix64
         access(all) var allowedWithdrawal: UFix64
+        access(all) var automationEnabled: Bool
+        access(all) var maxAutomaticWithdrawal: UFix64
         
         /// Process usage update from LiteLLM via FDC
         access(all) fun updateUsage(_ usage: UsageReport) {
             self.lastUsage = usage
             
             // Calculate tier
-            self.currentTier = SimpleUsageSubscriptions.getTierForUsage(usage.totalTokens)
+            self.currentTier = DynamicEntitlements.getTierForUsage(usage.totalTokens)
             
             // Calculate price
             let basePrice = UFix64(usage.totalTokens) / 1000.0 * self.currentTier.pricePerK
@@ -90,8 +116,8 @@ access(all) contract SimpleUsageSubscriptions {
             )
         }
         
-        /// Provider withdraws based on usage
-        access(all) fun withdrawByUsage(amount: UFix64): @{FungibleToken.Vault} {
+        /// Provider withdraws based on usage (requires UsageWithdraw entitlement)
+        access(UsageWithdraw) fun withdrawByUsage(amount: UFix64): @{FungibleToken.Vault} {
             pre {
                 amount <= self.allowedWithdrawal: "Exceeds usage allowance"
                 amount <= self.vault.balance: "Insufficient balance"
@@ -104,8 +130,40 @@ access(all) contract SimpleUsageSubscriptions {
             return <- payment
         }
         
-        /// Customer deposits funds
-        access(all) fun deposit(from: @{FungibleToken.Vault}) {
+        /// Automated withdrawal for usage (requires AutomationTrigger entitlement)
+        access(AutomationTrigger) fun automatedWithdraw(): @{FungibleToken.Vault}? {
+            if !self.automationEnabled || self.allowedWithdrawal == 0.0 {
+                return nil
+            }
+            
+            let withdrawAmount = self.allowedWithdrawal < self.maxAutomaticWithdrawal 
+                ? self.allowedWithdrawal 
+                : self.maxAutomaticWithdrawal
+                
+            if withdrawAmount > self.vault.balance {
+                return nil
+            }
+            
+            self.allowedWithdrawal = self.allowedWithdrawal - withdrawAmount
+            let payment <- self.vault.withdraw(amount: withdrawAmount)
+            
+            emit PaymentProcessed(vaultId: self.id, amount: withdrawAmount)
+            return <- payment
+        }
+        
+        /// Configure automation settings (requires ProviderAccess entitlement)
+        access(ProviderAccess) fun configureAutomation(enabled: Bool, maxAmount: UFix64) {
+            self.automationEnabled = enabled
+            self.maxAutomaticWithdrawal = maxAmount
+        }
+        
+        /// Customer deposits funds (requires CustomerDeposit entitlement)
+        access(CustomerDeposit) fun deposit(from: @{FungibleToken.Vault}) {
+            self.vault.deposit(from: <- from)
+        }
+        
+        /// Public deposit function for initial funding
+        access(all) fun publicDeposit(from: @{FungibleToken.Vault}) {
             self.vault.deposit(from: <- from)
         }
         
@@ -121,17 +179,19 @@ access(all) contract SimpleUsageSubscriptions {
         }
         
         init(customer: Address, provider: Address, initialDeposit: @{FungibleToken.Vault}) {
-            self.id = SimpleUsageSubscriptions.totalVaults
-            SimpleUsageSubscriptions.totalVaults = SimpleUsageSubscriptions.totalVaults + 1
+            self.id = DynamicEntitlements.totalVaults
+            DynamicEntitlements.totalVaults = DynamicEntitlements.totalVaults + 1
             
             self.customer = customer
             self.provider = provider
             self.vault <- initialDeposit
             
             self.lastUsage = nil
-            self.currentTier = SimpleUsageSubscriptions.getStarterTier()
+            self.currentTier = DynamicEntitlements.getStarterTier()
             self.currentPrice = 0.0
             self.allowedWithdrawal = 0.0
+            self.automationEnabled = false
+            self.maxAutomaticWithdrawal = 100.0  // Default 100 FLOW max auto-withdrawal
         }
     }
     
@@ -180,7 +240,7 @@ access(all) contract SimpleUsageSubscriptions {
     
     /// Public functions users connect to
     
-    /// Create subscription vault (main user entry point)
+    /// Create subscription vault with dynamic entitlements (main user entry point)
     access(all) fun createSubscriptionVault(
         customer: Address,
         provider: Address,
@@ -199,6 +259,18 @@ access(all) contract SimpleUsageSubscriptions {
         )
         
         return <- vault
+    }
+    
+    /// Create capability for provider with automation entitlements
+    access(all) fun createProviderCapability(vault: &SubscriptionVault): Capability<auth(ProviderEntitlements) &SubscriptionVault> {
+        // This would be implemented by the account holder to grant provider access
+        panic("Must be implemented by account holder")
+    }
+    
+    /// Create capability for customer with deposit entitlements
+    access(all) fun createCustomerCapability(vault: &SubscriptionVault): Capability<auth(CustomerEntitlements) &SubscriptionVault> {
+        // This would be implemented by the account holder to grant customer access
+        panic("Must be implemented by account holder")
     }
     
     /// Process usage update (called by FDC)
@@ -233,8 +305,8 @@ access(all) contract SimpleUsageSubscriptions {
     }
     
     init() {
-        self.VaultStoragePath = /storage/SimpleUsageSubscriptionVault
-        self.VaultPublicPath = /public/SimpleUsageSubscriptionVault
+        self.VaultStoragePath = /storage/DynamicEntitlementsVault
+        self.VaultPublicPath = /public/DynamicEntitlementsVault
         self.totalVaults = 0
     }
 }

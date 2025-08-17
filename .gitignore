@@ -6,10 +6,24 @@ imports/
 # Private keys and sensitive files
 *.pkey
 main.pkey
+mainnet.pkey
+testnet.pkey
+testnet-new.pkey
+mainnet-new.pkey
+emulator-account.pkey
 privatekeys/
 .env
 .env.local
 .env.production
+.env.development.local
+.env.test.local
+.env.production.local
+
+# API keys and credentials
+*api-key*
+*secret*
+*credential*
+mainnet-new-keys.md
 
 # Node.js dependencies
 node_modules/

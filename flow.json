@@ -29,12 +29,13 @@
 				"testnet": "7ee75d81c7229a61"
 			}
 		},
-		"SimpleUsageSubscriptions": {
-			"source": "cadence/contracts/SimpleUsageSubscriptions.cdc",
+		"DynamicEntitlements": {
+			"source": "cadence/contracts/DynamicEntitlements.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
 				"testing": "0000000000000007",
-				"testnet": "7ee75d81c7229a61"
+				"testnet": "7ee75d81c7229a61",
+				"mainnet": "6daee039a7b9c2f0"
 			}
 		},
 		"TestTokenMinter": {
@@ -56,6 +57,24 @@
 			"aliases": {
 				"testing": "0000000000000007",
 				"testnet": "daac4c96b1ea362d"
+			}
+		},
+		"UsageBasedSubscriptions": {
+			"source": "cadence/contracts/UsageBasedSubscriptions.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007",
+				"testnet": "7ee75d81c7229a61",
+				"mainnet": "6daee039a7b9c2f0"
+			}
+		},
+		"FTSOPriceFeedConnector": {
+			"source": "cadence/contracts/FTSOPriceFeedConnector.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"testing": "0000000000000007",
+				"testnet": "7ee75d81c7229a61",
+				"mainnet": "6daee039a7b9c2f0"
 			}
 		}
 	},
@@ -632,7 +651,9 @@
 				"AccountFactory",
 				"FlareFDCTriggers",
 				"LayerZeroConnectors",
-				"SimpleUsageSubscriptions"
+				"DynamicEntitlements",
+				"UsageBasedSubscriptions",
+				"FTSOPriceFeedConnector"
 			]
 		},
 		"mainnet": {
@@ -640,7 +661,9 @@
 				"ExampleConnectors",
 				"FlareFDCTriggers",
 				"LayerZeroConnectors",
-				"SimpleUsageSubscriptions"
+				"DynamicEntitlements",
+				"UsageBasedSubscriptions",
+				"FTSOPriceFeedConnector"
 			]
 		},
 		"testnet": {
@@ -648,7 +671,9 @@
 				"ExampleConnectors"
 			],
 			"testnet-new": [
-				"SimpleUsageSubscriptions",
+				"DynamicEntitlements",
+				"UsageBasedSubscriptions",
+				"FTSOPriceFeedConnector",
 				"LayerZeroConnectors",
 				"FlareFDCTriggers"
 			]

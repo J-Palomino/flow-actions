@@ -47,7 +47,7 @@ const CONTRACT_ADDRESSES = {
     mainnet: {
         FlowToken: '0x1654653399040a61',           // Real Flow mainnet
         FungibleToken: '0xf233dcee88fe0abe',        // Real FungibleToken mainnet  
-        SimpleUsageSubscriptions: '0x6daee039a7b9c2f0',  // Real deployed contract
+        DynamicEntitlements: '0x6daee039a7b9c2f0',      // Real deployed contract
         UsageBasedSubscriptions: '0x6daee039a7b9c2f0',   // Real deployed contract
         FTSOPriceFeedConnector: '0x6daee039a7b9c2f0',    // Real deployed contract
         FlareFDCTriggers: '0x6daee039a7b9c2f0',          // Real deployed contract
