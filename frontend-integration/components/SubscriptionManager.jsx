@@ -37,7 +37,11 @@ const SubscriptionManager = () => {
 
     // Subscribe to FCL user authentication
     useEffect(() => {
-        fcl.currentUser.subscribe(setFlowUser);
+        try {
+            fcl.currentUser.subscribe(setFlowUser);
+        } catch (error) {
+            console.error('❌ Error subscribing to FCL user:', error);
+        }
     }, []);
 
     // Update connection status based on user
@@ -81,11 +85,14 @@ const SubscriptionManager = () => {
     const handleConnectWallet = async () => {
         try {
             console.log('🔗 Connecting Flow wallet...');
+            if (typeof fcl === 'undefined' || !fcl.authenticate) {
+                throw new Error('FCL not properly initialized');
+            }
             await fcl.authenticate();
             console.log('✅ Flow wallet connection initiated');
         } catch (error) {
             console.error('❌ Flow wallet connection failed:', error);
-            alert('Failed to connect wallet. Please try again.');
+            alert(`Failed to connect wallet: ${error.message || 'Unknown error'}. Please try again.`);
         }
     };
 
@@ -275,11 +282,13 @@ const SubscriptionManager = () => {
                     <p>Status: <span style={{ color: getTxStatusColor(txStatus) }}>● {txStatus}</span></p>
                     {txDetails && (
                         <div className="tx-details">
-                            <p>Block: {txDetails.blockId?.slice(0, 8)}...</p>
+                            <p>Block: {txDetails.blockId ? txDetails.blockId.slice(0, 8) + '...' : 'Unknown'}</p>
                             <p>Events: {txDetails.events?.length || 0}</p>
-                            <a href={`https://www.flowdiver.io/tx/${txDetails.txId}`} target="_blank" rel="noopener noreferrer">
-                                View on FlowDiver →
-                            </a>
+                            {txDetails.txId && (
+                                <a href={`https://www.flowdiver.io/tx/${txDetails.txId}`} target="_blank" rel="noopener noreferrer">
+                                    View on FlowDiver →
+                                </a>
+                            )}
                         </div>
                     )}
                 </div>

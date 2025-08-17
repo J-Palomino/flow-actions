@@ -31,9 +31,18 @@ try {
   fcl.config()
     .put('accessNode.api', currentConfig['accessNode.api'])
     .put('discovery.wallet', currentConfig['discovery.wallet'])
+    .put('discovery.authn.endpoint', currentConfig['discovery.wallet'])
+    .put('discovery.authn.include', ['0x82ec283f88a62e65']) // Blocto wallet service
     .put('app.detail.title', currentConfig['app.detail.title'])
     .put('app.detail.icon', currentConfig['app.detail.icon'])
-    .put('flow.network', currentConfig['flow.network']);
+    .put('flow.network', currentConfig['flow.network'])
+    .put('fcl.limit', 9999)
+    .put('fcl.accountProof.resolver', async () => {
+      return {
+        appIdentifier: 'FlareFlow.link',
+        nonce: Math.floor(Math.random() * 1000000).toString()
+      };
+    });
   
   // Only log in development mode to prevent build hangs
   if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
