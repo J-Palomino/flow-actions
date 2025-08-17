@@ -8,11 +8,14 @@ const CreateSubscriptionForm = () => {
     const [depositAmount, setDepositAmount] = useState('100.0');
     const [flowBalance, setFlowBalance] = useState(null);
     const [vaultInfo, setVaultInfo] = useState(null);
+    const [topUpAmount, setTopUpAmount] = useState('50.0');
 
     const {
         createSubscriptionVault,
         getVaultInfo,
         checkFlowBalance,
+        checkVaultExists,
+        topUpSubscription,
         isLoading,
         error,
         txStatus
@@ -36,9 +39,27 @@ const CreateSubscriptionForm = () => {
             const balance = await checkFlowBalance(user.addr);
             setFlowBalance(balance);
 
-            // Check if user already has a vault
-            const info = await getVaultInfo(user.addr);
-            setVaultInfo(info);
+            // Check if vault exists first
+            const vaultExists = await checkVaultExists(user.addr);
+            console.log('Vault exists:', vaultExists);
+
+            if (vaultExists) {
+                // Try to get vault info
+                try {
+                    const info = await getVaultInfo(user.addr);
+                    console.log('Vault info:', info);
+                    setVaultInfo(info);
+                } catch (infoErr) {
+                    console.error('Error getting vault info:', infoErr);
+                    // Vault exists but can't read info - might be a capability issue
+                    setVaultInfo({
+                        exists: true,
+                        error: 'Unable to read vault details. Check capability setup.'
+                    });
+                }
+            } else {
+                setVaultInfo(null);
+            }
         } catch (err) {
             console.error('Error loading user data:', err);
         }
@@ -62,6 +83,30 @@ const CreateSubscriptionForm = () => {
         if (result.success) {
             alert(`✅ Subscription vault created! Vault ID: ${result.vaultId}`);
             // Reload user data to show new vault
+            loadUserData();
+        } else {
+            alert(`❌ Error: ${result.error}`);
+        }
+    };
+
+    const handleTopUp = async (e) => {
+        e.preventDefault();
+        
+        if (!user.loggedIn) {
+            alert('Please connect your Flow wallet first');
+            return;
+        }
+
+        if (flowBalance < parseFloat(topUpAmount)) {
+            alert('Insufficient Flow balance');
+            return;
+        }
+
+        const result = await topUpSubscription(parseFloat(topUpAmount));
+        
+        if (result.success) {
+            alert(`✅ Successfully added ${topUpAmount} FLOW to your subscription!`);
+            // Reload user data to show updated balance
             loadUserData();
         } else {
             alert(`❌ Error: ${result.error}`);
@@ -105,17 +150,23 @@ const CreateSubscriptionForm = () => {
                 <h3 className="font-semibold mb-2">Account Information</h3>
                 <p><strong>Address:</strong> {user.addr}</p>
                 <p><strong>Flow Balance:</strong> {flowBalance !== null ? `${flowBalance.toFixed(2)} FLOW` : 'Loading...'}</p>
-                {vaultInfo && (
+                {vaultInfo && !vaultInfo.error && (
                     <div className="mt-2 p-2 bg-green-50 rounded">
                         <p className="text-green-800"><strong>✅ Subscription Vault Active</strong></p>
-                        <p>Balance: {parseFloat(vaultInfo.balance).toFixed(2)} FLOW</p>
-                        <p>Tier: {vaultInfo.tier}</p>
-                        <p>Current Price: ${parseFloat(vaultInfo.currentPrice).toFixed(4)}</p>
+                        <p>Balance: {parseFloat(vaultInfo.balance || 0).toFixed(2)} FLOW</p>
+                        <p>Tier: {vaultInfo.tier || 'Unknown'}</p>
+                        <p>Current Price: ${parseFloat(vaultInfo.currentPrice || 0).toFixed(4)}</p>
+                    </div>
+                )}
+                {vaultInfo && vaultInfo.error && (
+                    <div className="mt-2 p-2 bg-yellow-50 rounded">
+                        <p className="text-yellow-800"><strong>⚠️ Vault Found but Not Accessible</strong></p>
+                        <p className="text-sm">{vaultInfo.error}</p>
                     </div>
                 )}
             </div>
 
-            {!vaultInfo ? (
+            {!vaultInfo || vaultInfo.error ? (
                 /* Create Subscription Form */
                 <form onSubmit={handleCreateSubscription}>
                     <div className="mb-4">
@@ -201,26 +252,72 @@ const CreateSubscriptionForm = () => {
                     )}
                 </form>
             ) : (
-                /* Existing Vault Display */
-                <div className="text-center">
-                    <h3 className="text-lg font-semibold text-green-800 mb-4">
+                /* Existing Vault Management */
+                <div>
+                    <h3 className="text-lg font-semibold text-green-800 mb-4 text-center">
                         🎉 Your Usage-Based Subscription is Active!
                     </h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                        <p><strong>Vault Balance:</strong> {parseFloat(vaultInfo.balance).toFixed(2)} FLOW</p>
-                        <p><strong>Current Tier:</strong> {vaultInfo.tier}</p>
-                        <p><strong>Current Price:</strong> ${parseFloat(vaultInfo.currentPrice).toFixed(4)}</p>
-                        <p><strong>Allowed Withdrawal:</strong> ${parseFloat(vaultInfo.allowedWithdrawal).toFixed(4)}</p>
-                        <p className="text-sm text-gray-600 mt-2">
-                            Last updated: {new Date(parseFloat(vaultInfo.lastUpdate) * 1000).toLocaleString()}
+                    
+                    <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <p><strong>Vault ID:</strong> {vaultInfo.vaultId || 'N/A'}</p>
+                                <p><strong>Balance:</strong> {parseFloat(vaultInfo.balance || 0).toFixed(2)} FLOW</p>
+                                <p><strong>Current Tier:</strong> {vaultInfo.tier || 'Starter'}</p>
+                            </div>
+                            <div>
+                                <p><strong>Current Price:</strong> ${parseFloat(vaultInfo.currentPrice || 0).toFixed(4)}</p>
+                                <p><strong>Allowed Withdrawal:</strong> ${parseFloat(vaultInfo.allowedWithdrawal || 0).toFixed(4)}</p>
+                                <p className="text-sm text-gray-600">
+                                    Last updated: {vaultInfo.lastUpdate && parseFloat(vaultInfo.lastUpdate) > 0 
+                                        ? new Date(parseFloat(vaultInfo.lastUpdate) * 1000).toLocaleString()
+                                        : 'Never'
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Top Up Form */}
+                    <div className="bg-blue-50 rounded-lg p-4 mb-4">
+                        <h4 className="font-semibold text-blue-800 mb-3">💰 Add Funds to Subscription</h4>
+                        <form onSubmit={handleTopUp} className="flex gap-3">
+                            <div className="flex-1">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    value={topUpAmount}
+                                    onChange={(e) => setTopUpAmount(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                    placeholder="Amount in FLOW"
+                                    required
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={isLoading || !flowBalance || flowBalance < parseFloat(topUpAmount)}
+                                className={`px-4 py-2 rounded font-medium ${
+                                    isLoading || !flowBalance || flowBalance < parseFloat(topUpAmount)
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                                }`}
+                            >
+                                {isLoading ? 'Adding...' : 'Add Funds'}
+                            </button>
+                        </form>
+                        <p className="text-sm text-blue-700 mt-2">
+                            Your current balance: {flowBalance ? flowBalance.toFixed(2) : '...'} FLOW
                         </p>
                     </div>
-                    <button
-                        onClick={loadUserData}
-                        className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                    >
-                        Refresh Data
-                    </button>
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={loadUserData}
+                            className="flex-1 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                        >
+                            🔄 Refresh Data
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

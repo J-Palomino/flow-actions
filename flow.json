@@ -18,7 +18,7 @@
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
 				"testing": "0000000000000007",
-				"testnet": "0x7ee75d81c7229a61"
+				"testnet": "7ee75d81c7229a61"
 			}
 		},
 		"LayerZeroConnectors": {
@@ -26,7 +26,7 @@
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
 				"testing": "0000000000000007",
-				"testnet": "0x7ee75d81c7229a61"
+				"testnet": "7ee75d81c7229a61"
 			}
 		},
 		"SimpleUsageSubscriptions": {
@@ -34,7 +34,7 @@
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
 				"testing": "0000000000000007",
-				"testnet": "0x7ee75d81c7229a61"
+				"testnet": "7ee75d81c7229a61"
 			}
 		},
 		"TestTokenMinter": {
@@ -564,6 +564,13 @@
 				"location": "emulator-account.pkey"
 			}
 		},
+		"main": {
+			"address": "6daee039a7b9c2f0",
+			"key": {
+				"type": "file",
+				"location": "main.pkey"
+			}
+		},
 		"mainnet": {
 			"address": "0e5b1dececaca3a8",
 			"key": {
@@ -579,7 +586,7 @@
 			}
 		},
 		"testnet-new": {
-			"address": "0x7ee75d81c7229a61",
+			"address": "7ee75d81c7229a61",
 			"key": {
 				"type": "file",
 				"location": "testnet-new.pkey"
@@ -629,8 +636,11 @@
 			]
 		},
 		"mainnet": {
-			"mainnet": [
-				"ExampleConnectors"
+			"main": [
+				"ExampleConnectors",
+				"FlareFDCTriggers",
+				"LayerZeroConnectors",
+				"SimpleUsageSubscriptions"
 			]
 		},
 		"testnet": {
