@@ -169,15 +169,16 @@ class LiteLLMFlareConnector {
         if (!data || !Array.isArray(data)) return [];
         
         return data.map(record => ({
-            user_id: record.user || record.end_user || record.metadata?.user_api_key_user_id || record.api_key || 'default_user_id',
-            model: record.model,
+            user_id: record.user || record.end_user || record.metadata?.user_api_key_user_id || record.session_id || 'api_user',
+            model: record.model || 'unknown',
             prompt_tokens: record.prompt_tokens || 0,
             completion_tokens: record.completion_tokens || 0,
             total_tokens: record.total_tokens || (record.prompt_tokens || 0) + (record.completion_tokens || 0),
             timestamp: record.startTime || record.timestamp || record.created_at,
             api_calls: 1,
             cost: record.spend || 0,
-            request_id: record.request_id
+            request_id: record.request_id,
+            status: record.status || 'unknown'
         }));
     }
 
