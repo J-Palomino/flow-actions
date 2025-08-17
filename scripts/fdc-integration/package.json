@@ -1,0 +1,32 @@
+{
+  "name": "litellm-flare-connector",
+  "version": "1.0.0",
+  "description": "Connect LiteLLM usage data to Flare oracle for Flow blockchain billing",
+  "main": "litellm-flare-connector.js",
+  "scripts": {
+    "start": "node litellm-flare-connector.js",
+    "test": "node test-connector.js",
+    "dev": "nodemon litellm-flare-connector.js",
+    "test-phala": "node test-phala-endpoint.js",
+    "generate-wallet": "node generate-flare-wallet.js",
+    "test-flare": "node test-flare-wallet.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "ws": "^8.14.0",
+    "dotenv": "^16.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "keywords": [
+    "litellm",
+    "flare",
+    "oracle",
+    "flow",
+    "blockchain",
+    "usage-billing"
+  ],
+  "author": "Flow Actions Team",
+  "license": "MIT"
+}

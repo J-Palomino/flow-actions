@@ -221,6 +221,9 @@ const SubscriptionDashboard = () => {
                 <div style={{ padding: '20px', border: '1px solid #333', borderRadius: '8px' }}>
                     <h2>🆕 Create Usage-Based Subscription</h2>
                     
+                    {/* Storage Capacity Check */}
+                    {user?.addr && <StorageChecker userAddress={user.addr} />}
+                    
                     <div style={{ marginBottom: '20px' }}>
                         <label>Provider Address:</label>
                         <input
