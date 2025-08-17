@@ -3,6 +3,7 @@ import * as fcl from '@onflow/fcl';
 import { useUsageSubscription } from '../hooks/useUsageSubscription';
 import { PRICING_TIERS, TX_STATUS } from '../config/flowConfig';
 import StorageChecker from './StorageChecker';
+import UsageDashboard from './UsageDashboard';
 
 const SubscriptionDashboard = () => {
     const {
@@ -200,6 +201,20 @@ const SubscriptionDashboard = () => {
                     }}
                 >
                     Manage Subscription
+                </button>
+                <button 
+                    onClick={() => setActiveTab('usage')}
+                    style={{ 
+                        marginRight: '10px',
+                        padding: '10px 20px',
+                        backgroundColor: activeTab === 'usage' ? '#4169E1' : '#333',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Usage Dashboard
                 </button>
                 <button 
                     onClick={() => setActiveTab('pricing')}
