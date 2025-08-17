@@ -9,6 +9,12 @@ const CreateSubscriptionForm = () => {
     const [flowBalance, setFlowBalance] = useState(null);
     const [vaultInfo, setVaultInfo] = useState(null);
     const [topUpAmount, setTopUpAmount] = useState('50.0');
+    
+    // New entitlement settings
+    const [entitlementType, setEntitlementType] = useState('dynamic');
+    const [withdrawLimit, setWithdrawLimit] = useState('50.0');
+    const [expirationAmount, setExpirationAmount] = useState('30');
+    const [expirationUnit, setExpirationUnit] = useState('days');
 
     const {
         createSubscriptionVault,
