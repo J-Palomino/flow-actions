@@ -12,6 +12,7 @@ access(all) contract UsageBasedSubscriptions {
     access(all) event UsageDataReceived(vaultId: UInt64, usage: UsageReport, source: String)
     access(all) event PriceCalculated(vaultId: UInt64, basePrice: UFix64, usageMultiplier: UFix64, finalPrice: UFix64)
     access(all) event PaymentProcessed(vaultId: UInt64, amount: UFix64, provider: Address)
+    access(all) event AutomaticPaymentProcessed(vaultId: UInt64, amount: UFix64, provider: Address, totalPaidToDate: UFix64)
     access(all) event EntitlementUpdated(vaultId: UInt64, withdrawLimit: UFix64, validUntil: UFix64)
     access(all) event UsageTierChanged(vaultId: UInt64, oldTier: String, newTier: String)
     
@@ -381,6 +382,12 @@ access(all) contract UsageBasedSubscriptions {
             self.currentUsage = nil
             self.usageHistory = []
             self.currentTier = UsageBasedSubscriptions.getDefaultTier()
+            
+            // Initialize cumulative usage tracking
+            self.lastPaidTokens = 0
+            self.lastPaidRequests = 0
+            self.totalPaidAmount = 0.0
+            self.lastOracleUpdate = 0.0
             
             self.basePrice = 10.0  // $10 base
             self.usageMultiplier = 1.0

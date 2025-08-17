@@ -30,30 +30,44 @@ class RealtimeUsageService {
     async getHybridUsage(apiKey, vaultId) {
         try {
             // Get both pending and confirmed data
-            const [pending, confirmed] = await Promise.all([
+            const [realTimeUsage, vaultStatus] = await Promise.all([
                 this.getPendingUsage(apiKey),
                 this.getConfirmedUsage(vaultId)
             ]);
 
+            // Calculate differential amounts
+            const totalTokens = realTimeUsage.tokens || 0;
+            const totalRequests = realTimeUsage.requests || 0;
+            const totalCost = realTimeUsage.cost || 0;
+            
+            const paidTokens = vaultStatus.lastPaidTokens || 0;
+            const paidRequests = vaultStatus.lastPaidRequests || 0;
+            const paidCost = vaultStatus.totalPaidAmount || 0;
+            
+            // Pending = Total - Already Paid
+            const pendingTokens = Math.max(0, totalTokens - paidTokens);
+            const pendingRequests = Math.max(0, totalRequests - paidRequests);
+            const pendingCost = Math.max(0, totalCost - paidCost);
+
             // Combine the data
             return {
-                // Real-time data (may not be billed yet)
+                // Real-time data that hasn't been paid yet
                 pending: {
-                    tokens: pending.tokens || 0,
-                    requests: pending.requests || 0,
-                    cost: pending.cost || 0,
-                    lastUpdate: pending.timestamp || new Date().toISOString(),
-                    status: 'PENDING_ORACLE_CONFIRMATION'
+                    tokens: pendingTokens,
+                    requests: pendingRequests,
+                    cost: pendingCost,
+                    lastUpdate: realTimeUsage.timestamp || new Date().toISOString(),
+                    status: 'AWAITING_ORACLE_CONFIRMATION'
                 },
                 
-                // Oracle-confirmed data (will be billed)
+                // Already paid/confirmed data
                 confirmed: {
-                    tokens: confirmed.tokens || 0,
-                    requests: confirmed.requests || 0,
-                    cost: confirmed.cost || 0,
-                    lastAttestation: confirmed.attestationTime || null,
-                    flareRoundId: confirmed.roundId || null,
-                    status: 'ORACLE_VERIFIED'
+                    tokens: paidTokens,
+                    requests: paidRequests,
+                    cost: paidCost,
+                    lastAttestation: vaultStatus.lastOracleUpdate || null,
+                    flareRoundId: vaultStatus.roundId || null,
+                    status: 'PAID_TO_PROVIDER'
                 },
                 
                 // Combined totals
