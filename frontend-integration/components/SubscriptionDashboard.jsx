@@ -358,6 +358,13 @@ const SubscriptionDashboard = () => {
                 </div>
             )}
 
+            {activeTab === 'usage' && (
+                <UsageDashboard 
+                    vaultId={vaultInfo?.vaultId} 
+                    account={user?.addr}
+                />
+            )}
+
             {activeTab === 'pricing' && (
                 <div style={{ padding: '20px', border: '1px solid #333', borderRadius: '8px' }}>
                     <h2>💰 Dynamic Pricing Tiers</h2>
