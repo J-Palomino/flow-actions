@@ -75,3 +75,23 @@ input:focus {
   font-family: monospace;
   word-break: break-all;
 }
+
+/* USD Balance Styling */
+.balance-usd {
+  font-size: 0.8em;
+  color: #666;
+  font-weight: normal;
+  margin-top: 4px;
+}
+
+.balance-usd-detail {
+  font-size: 0.85em;
+  color: #888;
+  margin-left: 8px;
+  font-weight: normal;
+}
+
+.oracle-unavailable {
+  color: #ff6b6b !important;
+  font-style: italic;
+}

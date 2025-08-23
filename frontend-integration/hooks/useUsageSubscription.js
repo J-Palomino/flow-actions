@@ -5,6 +5,32 @@ import { CONTRACTS, TX_STATUS } from '../config/flowConfig';
 import litellmKeyService from '../services/litellmKeyService';
 import encryptionService from '../services/encryptionService';
 
+// Script to get current FLOW/USD price from Flare FTSO oracle
+const GET_FLOW_PRICE_SCRIPT = `
+import FTSOPriceFeedConnector from 0x123cb47fe122f6e3
+
+access(all) fun main(): {String: AnyStruct} {
+    if let priceData = FTSOPriceFeedConnector.getCurrentPrice(symbol: "FLOW/USD") {
+        return {
+            "success": true,
+            "price": priceData.price,
+            "verified": priceData.verified,
+            "timestamp": priceData.timestamp,
+            "source": "Flare FTSO Oracle"
+        }
+    }
+    
+    return {
+        "success": false,
+        "price": nil,
+        "verified": false,
+        "timestamp": 0.0,
+        "source": "Oracle Unavailable",
+        "error": "FTSO price feed unavailable"
+    }
+}
+`;
+
 // Transaction to set encrypted LiteLLM API key in vault - only works with new encrypted vaults
 const SET_ENCRYPTED_LITELLM_KEY_TRANSACTION = `
 import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
@@ -1323,6 +1349,44 @@ export const useUsageSubscription = () => {
         }
     };
 
+    // Get current FLOW/USD price from blockchain oracle
+    const getFlowPrice = async () => {
+        try {
+            const priceData = await fcl.query({
+                cadence: GET_FLOW_PRICE_SCRIPT
+            });
+            
+            console.log('💱 FLOW price data:', priceData);
+            
+            if (priceData.success && priceData.price) {
+                return {
+                    price: parseFloat(priceData.price),
+                    verified: priceData.verified || false,
+                    source: priceData.source || 'Oracle',
+                    timestamp: priceData.timestamp || 0
+                };
+            } else {
+                // Oracle failed - return null to indicate unavailable
+                return {
+                    price: null,
+                    verified: false,
+                    source: 'Oracle Unavailable',
+                    timestamp: 0,
+                    error: priceData.error || 'Oracle returned no price'
+                };
+            }
+        } catch (err) {
+            console.warn('⚠️ Could not fetch FLOW price from oracle:', err);
+            return {
+                price: null,
+                verified: false,
+                source: 'Oracle Error',
+                timestamp: 0,
+                error: err.message
+            };
+        }
+    };
+
     return {
         createSubscriptionVault,
         topUpSubscription,
@@ -1339,6 +1403,7 @@ export const useUsageSubscription = () => {
         deleteSubscription,
         setEncryptedLiteLLMKeyInVault,
         decryptVaultApiKey,
+        getFlowPrice,
         isLoading,
         error,
         txStatus,

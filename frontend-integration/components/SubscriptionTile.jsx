@@ -12,8 +12,31 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [showBridge, setShowBridge] = useState(false);
     const [decryptedApiKey, setDecryptedApiKey] = useState(null);
     const [decryptingKey, setDecryptingKey] = useState(false);
+    const [dataSource, setDataSource] = useState('None'); // Track current data source
+    const [flowPrice, setFlowPrice] = useState(null); // Dynamic FLOW price from oracle
     
-    const { decryptVaultApiKey } = useUsageSubscription();
+    const { decryptVaultApiKey, getFlowPrice } = useUsageSubscription();
+    
+    // Fetch current FLOW price on component mount
+    useEffect(() => {
+        const fetchFlowPrice = async () => {
+            try {
+                const priceData = await getFlowPrice();
+                if (priceData.price !== null) {
+                    setFlowPrice(priceData.price);
+                    console.log(`💱 Updated FLOW price: $${priceData.price} (${priceData.source})`);
+                } else {
+                    setFlowPrice(null);
+                    console.warn('⚠️ FLOW price oracle unavailable:', priceData.error);
+                }
+            } catch (error) {
+                console.warn('⚠️ Error fetching FLOW price:', error);
+                setFlowPrice(null);
+            }
+        };
+        
+        fetchFlowPrice();
+    }, [subscription.vaultId]);
     
     // Show loading skeleton if no subscription data
     if (!subscription) {
@@ -48,26 +71,98 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
         setError(null);
         
         try {
-            const usage = await litellmKeyService.getKeyUsage(decryptedApiKey);
-            setUsageData(usage);
+            // Get current timestamp
+            const currentTime = Date.now() / 1000; // Convert to seconds
+            
+            // Fetch fresh API data
+            const apiUsage = await litellmKeyService.getKeyUsage(decryptedApiKey);
+            
+            // Check which data source is more recent
+            const lastAPIUpdate = subscription?.lastDirectAPIUpdate || 0;
+            const lastOracleUpdate = subscription?.lastFlareOracleUpdate || 0;
+            
+            // Determine which data to display
+            let displayData = apiUsage;
+            let displaySource = 'Direct API';
+            
+            // If we have on-chain Oracle data that's more recent than API
+            if (subscription?.lastUsageData && lastOracleUpdate > lastAPIUpdate) {
+                const oracleAge = currentTime - lastOracleUpdate;
+                
+                // If Oracle data is less than 5 minutes old, prefer it
+                if (oracleAge < 300) {
+                    // Merge Oracle data with API format
+                    displayData = {
+                        ...apiUsage,
+                        usage_summary: {
+                            total_requests: subscription.lastUsageData.apiCalls || apiUsage.usage_summary?.total_requests || 0,
+                            total_tokens: subscription.lastUsageData.totalTokens || apiUsage.usage_summary?.total_tokens || 0,
+                            total_cost: subscription.lastUsageData.costEstimate || apiUsage.usage_summary?.total_cost || 0,
+                            period_start: apiUsage.usage_summary?.period_start,
+                            period_end: apiUsage.usage_summary?.period_end,
+                            _oracleVerified: true,
+                            _lastUpdate: lastOracleUpdate
+                        },
+                        model_breakdown: subscription.lastUsageData.models || apiUsage.model_breakdown || {},
+                        recent_requests: apiUsage.recent_requests || []
+                    };
+                    displaySource = '🔮 Flare Oracle (Verified)';
+                }
+            }
+            
+            // Check if API data is fresher (based on actual usage changes)
+            if (apiUsage?.usage_summary?.total_tokens > (subscription?.lastUsageData?.totalTokens || 0)) {
+                displaySource = '📡 Direct API (Latest)';
+                // API has newer data, use it
+                displayData = apiUsage;
+            }
+            
+            setUsageData(displayData);
+            setDataSource(displaySource);
+            
+            console.log(`📊 Usage Data Source: ${displaySource}`);
+            console.log(`   Last API Update: ${new Date(lastAPIUpdate * 1000).toLocaleString()}`);
+            console.log(`   Last Oracle Update: ${new Date(lastOracleUpdate * 1000).toLocaleString()}`);
+            
         } catch (err) {
             console.warn(`Usage data fetch failed for key ${decryptedApiKey?.slice(0, 20)}:`, err.message);
             console.warn(`Full error:`, err);
             
-            // Set empty usage data structure instead of error for new keys
-            setUsageData({
-                key: decryptedApiKey,
-                usage_summary: {
-                    total_requests: 0,
-                    total_tokens: 0,
-                    total_cost: 0,
-                    period_start: new Date().toISOString(),
-                    period_end: new Date().toISOString()
-                },
-                model_breakdown: {},
-                recent_requests: [],
-                _fetchError: err.message // Add error info for debugging
-            });
+            // Fallback to on-chain data if available
+            if (subscription?.lastUsageData) {
+                setUsageData({
+                    key: decryptedApiKey,
+                    usage_summary: {
+                        total_requests: subscription.lastUsageData.apiCalls || 0,
+                        total_tokens: subscription.lastUsageData.totalTokens || 0,
+                        total_cost: subscription.lastUsageData.costEstimate || 0,
+                        period_start: new Date().toISOString(),
+                        period_end: new Date().toISOString(),
+                        _oracleVerified: true,
+                        _source: 'On-chain Fallback'
+                    },
+                    model_breakdown: subscription.lastUsageData.models || {},
+                    recent_requests: [],
+                    _fetchError: err.message
+                });
+                setDataSource('⛓️ On-chain Data (Fallback)');
+            } else {
+                // No data available, show empty
+                setUsageData({
+                    key: decryptedApiKey,
+                    usage_summary: {
+                        total_requests: 0,
+                        total_tokens: 0,
+                        total_cost: 0,
+                        period_start: new Date().toISOString(),
+                        period_end: new Date().toISOString()
+                    },
+                    model_breakdown: {},
+                    recent_requests: [],
+                    _fetchError: err.message
+                });
+                setDataSource('No Data');
+            }
             
             // Only show error for actual API/network issues, not empty data
             if (err.message.includes('network') || err.message.includes('timeout') || err.message.includes('ECONNREFUSED')) {
@@ -193,7 +288,24 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                 )}
 
                 {usageData && !loading && (
-                    <div className="usage-grid">
+                    <div>
+                        {/* Data source indicator */}
+                        <div style={{ 
+                            padding: '8px 12px', 
+                            background: dataSource.includes('Oracle') ? '#DBEAFE' : '#FEF3C7',
+                            borderRadius: '6px',
+                            marginBottom: '12px',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: dataSource.includes('Oracle') ? '#1E40AF' : '#92400E',
+                            display: 'inline-block'
+                        }}>
+                            {dataSource}
+                            {dataSource.includes('Oracle') && ' (Decentralized)'}
+                            {dataSource.includes('API') && ' (Real-time)'}
+                        </div>
+                        
+                        <div className="usage-grid">
                         <div className="usage-metric">
                             <div className="metric-label">Total Requests</div>
                             <div className="metric-value">
@@ -216,8 +328,18 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                             <div className="metric-label">Vault Balance</div>
                             <div className="metric-value">
                                 {parseFloat(subscription?.balance || 0).toFixed(4)} FLOW
+                                {flowPrice !== null ? (
+                                    <div className="balance-usd">
+                                        ≈ {formatCurrency((parseFloat(subscription?.balance || 0) * flowPrice))}
+                                    </div>
+                                ) : (
+                                    <div className="balance-usd oracle-unavailable">
+                                        Oracle unavailable
+                                    </div>
+                                )}
                             </div>
                         </div>
+                    </div>
                     </div>
                 )}
             </div>
@@ -254,7 +376,18 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                             </div>
                             <div className="vault-info-item">
                                 <span className="info-label">Balance:</span>
-                                <span className="info-value">{parseFloat(subscription?.balance || 0).toFixed(6)} FLOW</span>
+                                <span className="info-value">
+                                    {parseFloat(subscription?.balance || 0).toFixed(6)} FLOW
+                                    {flowPrice !== null ? (
+                                        <span className="balance-usd-detail">
+                                            (≈ {formatCurrency((parseFloat(subscription?.balance || 0) * flowPrice))})
+                                        </span>
+                                    ) : (
+                                        <span className="balance-usd-detail oracle-unavailable">
+                                            (Oracle unavailable)
+                                        </span>
+                                    )}
+                                </span>
                             </div>
                             <div className="vault-info-item">
                                 <span className="info-label">Created:</span>
@@ -265,12 +398,18 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
 
                     {/* Debug Info */}
                     <div className="debug-section" style={{ fontSize: '12px', color: '#666', padding: '10px', background: '#f8f8f8', marginBottom: '10px', borderRadius: '4px' }}>
-                        <p><strong>Security Debug Info:</strong></p>
+                        <p><strong>Hybrid Data Source Info:</strong></p>
+                        <p>Data Source: <strong>{dataSource}</strong></p>
                         <p>Has Encrypted Key: {subscription?.hasApiKey ? '✅ Yes' : '❌ No'}</p>
                         <p>Key Decrypted: {decryptedApiKey ? '✅ Yes' : '❌ No'}</p>
                         <p>Requires Signature: {subscription?.requiresSignature ? '✅ Yes (Secure)' : '❌ No'}</p>
                         {decryptedApiKey && <p>Key Preview: {decryptedApiKey.slice(0, 20)}...</p>}
                         <p>Usage Data State: {loading ? '⏳ Loading...' : usageData ? '✅ Loaded' : '❌ No Data'}</p>
+                        {usageData?.usage_summary?._oracleVerified && (
+                            <p style={{ color: 'green' }}>🔮 Oracle Verified: ✅ Yes</p>
+                        )}
+                        <p>Last API Update: {subscription?.lastDirectAPIUpdate ? new Date(subscription.lastDirectAPIUpdate * 1000).toLocaleTimeString() : 'Never'}</p>
+                        <p>Last Oracle Update: {subscription?.lastFlareOracleUpdate ? new Date(subscription.lastFlareOracleUpdate * 1000).toLocaleTimeString() : 'Never'}</p>
                         {error && <p style={{ color: 'red' }}>Error: {error}</p>}
                         {usageData?._fetchError && <p style={{ color: 'orange' }}>Fetch Error: {usageData._fetchError}</p>}
                         <p>Requests: {usageData?.usage_summary?.total_requests || 0}</p>

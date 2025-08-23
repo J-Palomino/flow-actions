@@ -175,6 +175,12 @@ access(all) contract EncryptedUsageSubscriptions {
         access(all) var totalPaidAmount: UFix64     // Total FLOW paid to provider
         access(all) var lastOracleUpdate: UFix64    // Timestamp of last oracle confirmation
         
+        // Hybrid data source tracking
+        access(all) var lastDirectAPIUpdate: UFix64     // Timestamp of last direct API update
+        access(all) var lastFlareOracleUpdate: UFix64   // Timestamp of last Flare Oracle update
+        access(all) var lastUsageData: UsageReport?     // Store the actual last usage data
+        access(all) var lastDataSource: String          // "API" or "Oracle" - tracks most recent source
+        
         // Dynamic pricing
         access(all) var basePrice: UFix64
         access(all) var usageMultiplier: UFix64
@@ -224,8 +230,21 @@ access(all) contract EncryptedUsageSubscriptions {
         
         /// Process usage data from FDC and update pricing
         access(all) fun processUsageData(usage: UsageReport) {
+            // Determine the data source based on metadata
+            let source = usage.metadata["source"] as? String ?? "Direct API"
+            
+            // Update source-specific timestamps
+            if source == "Flare Oracle FDC" {
+                self.lastFlareOracleUpdate = getCurrentBlock().timestamp
+                self.lastDataSource = "Oracle"
+            } else {
+                self.lastDirectAPIUpdate = getCurrentBlock().timestamp
+                self.lastDataSource = "API"
+            }
+            
             // Store usage report
             self.currentUsage = usage
+            self.lastUsageData = usage
             self.usageHistory.append(usage)
             
             // Calculate NEW usage since last payment (differential)
@@ -286,28 +305,35 @@ access(all) contract EncryptedUsageSubscriptions {
             let usdCost = usage.costEstimate
             
             if usdCost > 0.0 {
-                // Convert USD to FLOW using Flare FTSO price feed
-                let flowPrice = self.getFlowPriceInUSD()
-                let flowAmount = usdCost / flowPrice
-                
-                // Store pricing data
-                self.basePrice = usdCost
-                self.usageMultiplier = 1.0
-                self.currentPrice = flowAmount
-                
-                emit PriceConversion(
-                    vaultId: self.id,
-                    usdCost: usdCost,
-                    flowPrice: flowPrice,
-                    flowAmount: flowAmount
-                )
-                
-                emit PriceCalculated(
-                    vaultId: self.id,
-                    basePrice: self.basePrice,
-                    usageMultiplier: self.usageMultiplier,
-                    finalPrice: self.currentPrice
-                )
+                // Convert USD to FLOW using Flare FTSO price feed - FAIL if oracle unavailable
+                if let flowPrice = self.getFlowPriceInUSD() {
+                    let flowAmount = usdCost / flowPrice
+                    
+                    // Store pricing data
+                    self.basePrice = usdCost
+                    self.usageMultiplier = 1.0
+                    self.currentPrice = flowAmount
+                    
+                    emit PriceConversion(
+                        vaultId: self.id,
+                        usdCost: usdCost,
+                        flowPrice: flowPrice,
+                        flowAmount: flowAmount
+                    )
+                    
+                    emit PriceCalculated(
+                        vaultId: self.id,
+                        basePrice: self.basePrice,
+                        usageMultiplier: self.usageMultiplier,
+                        finalPrice: self.currentPrice
+                    )
+                } else {
+                    // Oracle failure - cannot process USD pricing
+                    log("❌ Cannot process USD-based pricing: FTSO oracle unavailable")
+                    log("   Skipping price calculation for vault ".concat(self.id.toString()))
+                    // Keep existing pricing unchanged
+                    return
+                }
             } else {
                 // Fallback to old token-based pricing if no USD cost provided
                 let tokenThousands = UFix64(usage.totalTokens) / 1000.0
@@ -347,7 +373,7 @@ access(all) contract EncryptedUsageSubscriptions {
         }
         
         /// Get current FLOW price in USD from Flare FTSO price feed
-        access(self) fun getFlowPriceInUSD(): UFix64 {
+        access(self) fun getFlowPriceInUSD(): UFix64? {
             // Get FLOW/USD price from FTSO price feed
             if let priceData = FTSOPriceFeedConnector.getCurrentPrice(symbol: "FLOW/USD") {
                 // Ensure price is reasonable (between $0.10 and $100.00) and verified
@@ -357,10 +383,9 @@ access(all) contract EncryptedUsageSubscriptions {
                 }
             }
             
-            // Fallback price if FTSO is unavailable (approximate current FLOW price)
-            let fallbackPrice = 0.75  // $0.75 per FLOW as fallback
-            log("⚠️ Using fallback FLOW price: $".concat(fallbackPrice.toString()))
-            return fallbackPrice
+            // Return nil if FTSO is unavailable - no hardcoded fallback
+            log("❌ FTSO price feed unavailable or unverified - cannot process USD-based pricing")
+            return nil
         }
         
         /// Update entitlement for provider withdrawals
@@ -501,6 +526,10 @@ access(all) contract EncryptedUsageSubscriptions {
                 "lastPaidRequests": self.lastPaidRequests,
                 "totalPaidAmount": self.totalPaidAmount,
                 "lastOracleUpdate": self.lastOracleUpdate,
+                "lastDirectAPIUpdate": self.lastDirectAPIUpdate,
+                "lastFlareOracleUpdate": self.lastFlareOracleUpdate,
+                "lastDataSource": self.lastDataSource,
+                "hasRecentUsageData": self.lastUsageData != nil,
                 "hasApiKey": self.hasApiKey(),
                 "encryptedApiKey": self.encryptedApiKey,
                 "keyEncryptionSalt": self.keyEncryptionSalt
@@ -534,6 +563,12 @@ access(all) contract EncryptedUsageSubscriptions {
             self.lastPaidRequests = 0
             self.totalPaidAmount = 0.0
             self.lastOracleUpdate = 0.0
+            
+            // Initialize hybrid tracking
+            self.lastDirectAPIUpdate = 0.0
+            self.lastFlareOracleUpdate = 0.0
+            self.lastUsageData = nil
+            self.lastDataSource = "None"
             
             self.basePrice = 10.0  // $10 base
             self.usageMultiplier = 1.0
@@ -587,12 +622,26 @@ access(all) contract EncryptedUsageSubscriptions {
             let totalTokens = trigger.payload["totalTokens"] as? UInt64 ?? 0
             let apiCalls = trigger.payload["apiCalls"] as? UInt64 ?? 0
             
-            // Create usage report
+            // Verify vault exists before processing
+            if !EncryptedUsageSubscriptions.vaultRegistry.containsKey(vaultId) {
+                log("⚠️ FDC Trigger rejected: Vault ".concat(vaultId.toString()).concat(" not found"))
+                return false
+            }
+            
+            // Create usage report from FDC data
             let models: {String: UInt64} = {}
             if let modelUsage = trigger.payload["models"] as? {String: UInt64} {
                 for key in modelUsage.keys {
                     models[key] = modelUsage[key]!
                 }
+            }
+            
+            // Add metadata to track FDC source
+            let metadata: {String: AnyStruct} = {
+                "fdcTriggerId": trigger.id,
+                "sourceChain": trigger.sourceChain,
+                "signature": trigger.signature,
+                "verified": true  // FDC triggers are cryptographically verified
             }
             
             let usage = UsageReport(
@@ -602,17 +651,23 @@ access(all) contract EncryptedUsageSubscriptions {
                 apiCalls: apiCalls,
                 models: models,
                 costEstimate: trigger.payload["costEstimate"] as? UFix64 ?? 0.0,  // USD cost from LiteLLM
-                metadata: {}
+                metadata: metadata
             )
             
-            // Update subscription vault
-            if let ownerAddress = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
-                // Vault access should be done via transactions with proper authorization
-                log("Usage update requested for vault ID: ".concat(vaultId.toString()))
-                return true
-            }
+            // Process usage update through the main updateUsageData function
+            log("🌐 FDC TRIGGER RECEIVED FOR VAULT ".concat(vaultId.toString()))
+            log("   Source: Flare Data Connector (Oracle)")
+            log("   Verified: ✅ Cryptographically signed")
             
-            return false
+            // Call the main usage update function with FDC source identifier
+            EncryptedUsageSubscriptions.updateUsageData(
+                vaultId: vaultId,
+                usageReport: usage,
+                source: "Flare Oracle FDC"
+            )
+            
+            log("✅ FDC trigger processed successfully")
+            return true
         }
         
         access(all) fun getSupportedTriggerTypes(): [FlareFDCTriggers.TriggerType] {
