@@ -12,9 +12,11 @@
     "test-flare": "node test-flare-wallet.js"
   },
   "dependencies": {
+    "@onflow/fcl": "^1.20.0",
+    "@onflow/types": "^1.4.1",
     "axios": "^1.6.0",
-    "ws": "^8.14.0",
-    "dotenv": "^16.3.0"
+    "dotenv": "^16.3.0",
+    "ws": "^8.14.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.0"
