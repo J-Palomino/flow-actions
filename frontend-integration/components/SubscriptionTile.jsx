@@ -8,24 +8,66 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [showDetails, setShowDetails] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
     const [showBridge, setShowBridge] = useState(false);
+    
+    // Show loading skeleton if no subscription data
+    if (!subscription) {
+        return (
+            <div className="subscription-tile">
+                <div className="tile-header">
+                    <div className="subscription-info">
+                        <h3 className="vault-title animate-pulse bg-gray-300 h-6 w-32 rounded"></h3>
+                        <div className="subscription-meta">
+                            <span className="provider animate-pulse bg-gray-300 h-4 w-48 rounded"></span>
+                        </div>
+                    </div>
+                </div>
+                <div className="usage-summary">
+                    <p className="animate-pulse bg-gray-300 h-4 w-64 rounded"></p>
+                </div>
+            </div>
+        );
+    }
 
     useEffect(() => {
-        if (subscription.litellmKey) {
+        if (subscription?.litellmKey) {
             fetchUsageData();
         }
-    }, [subscription.litellmKey]);
+    }, [subscription?.litellmKey]);
 
     const fetchUsageData = async () => {
-        if (!subscription.litellmKey) return;
+        if (!subscription?.litellmKey) return;
         
         setLoading(true);
         setError(null);
         
         try {
-            const usage = await litellmKeyService.getKeyUsage(subscription.litellmKey);
+            const usage = await litellmKeyService.getKeyUsage(subscription?.litellmKey);
             setUsageData(usage);
         } catch (err) {
-            setError(`Failed to fetch usage: ${err.message}`);
+            console.warn(`Usage data fetch failed for key ${subscription.litellmKey?.slice(0, 20)}:`, err.message);
+            console.warn(`Full error:`, err);
+            
+            // Set empty usage data structure instead of error for new keys
+            setUsageData({
+                key: subscription.litellmKey,
+                usage_summary: {
+                    total_requests: 0,
+                    total_tokens: 0,
+                    total_cost: 0,
+                    period_start: new Date().toISOString(),
+                    period_end: new Date().toISOString()
+                },
+                model_breakdown: {},
+                recent_requests: [],
+                _fetchError: err.message // Add error info for debugging
+            });
+            
+            // Only show error for actual API/network issues, not empty data
+            if (err.message.includes('network') || err.message.includes('timeout') || err.message.includes('ECONNREFUSED')) {
+                setError(`Network error: ${err.message}`);
+            } else {
+                setError(`API error: ${err.message}`);
+            }
         } finally {
             setLoading(false);
         }
@@ -64,9 +106,11 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
         <div className="subscription-tile">
             <div className="tile-header">
                 <div className="subscription-info">
-                    <h3 className="vault-title">Vault #{subscription.vaultId}</h3>
+                    <h3 className="vault-title">Vault #{subscription?.vaultId || 'Loading'}</h3>
                     <div className="subscription-meta">
-                        <span className="provider">Provider: {subscription.provider.slice(0, 8)}...</span>
+                        <span className="provider">
+                            Provider: {subscription?.provider ? `${subscription.provider.slice(0, 8)}...` : 'Loading...'}
+                        </span>
                         <span 
                             className="tier-badge"
                             style={{ backgroundColor: getTierColor(usageData?.usage_summary?.total_cost) }}
@@ -124,61 +168,114 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                         <div className="usage-metric">
                             <div className="metric-label">Vault Balance</div>
                             <div className="metric-value">
-                                {parseFloat(subscription.balance || 0).toFixed(4)} FLOW
+                                {parseFloat(subscription?.balance || 0).toFixed(4)} FLOW
                             </div>
                         </div>
                     </div>
                 )}
             </div>
 
-            {showDetails && usageData && (
+            {showDetails && (
                 <div className="detailed-usage">
-                    <div className="api-key-section">
-                        <h4>🔑 Your LiteLLM API Key</h4>
-                        <div className="api-key-display">
-                            <code className="api-key">
-                                {showApiKey ? subscription.litellmKey : subscription.litellmKey?.replace(/sk-(.+)/, 'sk-' + '•'.repeat(20))}
-                            </code>
-                            <div className="key-actions">
-                                <button 
-                                    onClick={() => setShowApiKey(!showApiKey)}
-                                    className="toggle-key-button"
-                                >
-                                    {showApiKey ? '👁️‍🗨️ Hide' : '👁️ Show Key'}
-                                </button>
-                                <button 
-                                    onClick={() => copyToClipboard(subscription.litellmKey)}
-                                    className="copy-button"
-                                >
-                                    📋 Copy Key
-                                </button>
+                    {/* Vault Details Section */}
+                    <div className="vault-details-section">
+                        <h4>📦 Vault Details</h4>
+                        <div className="vault-info-grid">
+                            <div className="vault-info-item">
+                                <span className="info-label">Vault ID:</span>
+                                <span className="info-value">#{subscription?.vaultId}</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Owner:</span>
+                                <span className="info-value">{subscription?.owner || 'Unknown'}</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Provider:</span>
+                                <span className="info-value">{subscription?.provider || 'Unknown'}</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Service:</span>
+                                <span className="info-value">{subscription?.serviceName || 'LiteLLM API'}</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Network:</span>
+                                <span className="info-value">{subscription?.network || 'mainnet'}</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Status:</span>
+                                <span className="info-value">{subscription?.isActive ? '✅ Active' : '❌ Inactive'}</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Balance:</span>
+                                <span className="info-value">{parseFloat(subscription?.balance || 0).toFixed(6)} FLOW</span>
+                            </div>
+                            <div className="vault-info-item">
+                                <span className="info-label">Created:</span>
+                                <span className="info-value">{subscription?.createdAt ? new Date(subscription.createdAt * 1000).toLocaleDateString() : 'Unknown'}</span>
                             </div>
                         </div>
-                        <div className="key-info">
-                            <span>Budget: ${subscription.maxBudget || 100}/month</span>
-                            <span>Spent: {formatCurrency(usageData.usage_summary?.total_cost)}</span>
-                            <span>Status: 🟢 Active</span>
-                        </div>
-                        
-                        <div className="usage-instructions">
-                            <h5>🚀 How to Use Your API Key</h5>
-                            <div className="endpoint-info">
-                                <div className="endpoint-label">OpenAI-Compatible Endpoint:</div>
-                                <div className="endpoint-url">
-                                    <code>https://llm.p10p.io</code>
-                                    <button 
-                                        onClick={() => copyToClipboard('https://llm.p10p.io')}
-                                        className="copy-endpoint-button"
-                                    >
-                                        📋
-                                    </button>
+                    </div>
+
+                    {/* Debug Info */}
+                    <div className="debug-section" style={{ fontSize: '12px', color: '#666', padding: '10px', background: '#f8f8f8', marginBottom: '10px', borderRadius: '4px' }}>
+                        <p><strong>Debug Info:</strong></p>
+                        <p>Has LiteLLM Key: {subscription?.litellmKey ? '✅ Yes' : '❌ No'}</p>
+                        {subscription?.litellmKey && <p>Key Preview: {subscription.litellmKey.slice(0, 30)}...</p>}
+                        <p>Usage Data State: {loading ? '⏳ Loading...' : usageData ? '✅ Loaded' : '❌ No Data'}</p>
+                        {error && <p style={{ color: 'red' }}>Error: {error}</p>}
+                        {usageData?._fetchError && <p style={{ color: 'orange' }}>Fetch Error: {usageData._fetchError}</p>}
+                        <p>Requests: {usageData?.usage_summary?.total_requests || 0}</p>
+                        <p>Cost: ${usageData?.usage_summary?.total_cost || 0}</p>
+                    </div>
+
+                    {usageData && (
+                        <div className="usage-data-section">
+                            <div className="api-key-section">
+                                <h4>🔑 Your LiteLLM API Key</h4>
+                                <div className="api-key-display">
+                                    <code className="api-key">
+                                        {showApiKey ? subscription.litellmKey : subscription.litellmKey?.replace(/sk-(.+)/, 'sk-' + '•'.repeat(20))}
+                                    </code>
+                                    <div className="key-actions">
+                                        <button 
+                                            onClick={() => setShowApiKey(!showApiKey)}
+                                            className="toggle-key-button"
+                                        >
+                                            {showApiKey ? '👁️‍🗨️ Hide' : '👁️ Show Key'}
+                                        </button>
+                                        <button 
+                                            onClick={() => copyToClipboard(subscription.litellmKey)}
+                                            className="copy-button"
+                                        >
+                                            📋 Copy Key
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            
-                            <div className="code-examples">
-                                <div className="example-section">
-                                    <div className="example-title">🐍 Python (OpenAI Client)</div>
-                                    <code className="code-block">
+                                <div className="key-info">
+                                    <span>Budget: ${subscription.maxBudget || 100}/month</span>
+                                    <span>Spent: {formatCurrency(usageData.usage_summary?.total_cost)}</span>
+                                    <span>Status: 🟢 Active</span>
+                                </div>
+                                
+                                <div className="usage-instructions">
+                                    <h5>🚀 How to Use Your API Key</h5>
+                                    <div className="endpoint-info">
+                                        <div className="endpoint-label">OpenAI-Compatible Endpoint:</div>
+                                        <div className="endpoint-url">
+                                            <code>https://llm.p10p.io</code>
+                                            <button 
+                                                onClick={() => copyToClipboard('https://llm.p10p.io')}
+                                                className="copy-endpoint-button"
+                                            >
+                                                📋
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="code-examples">
+                                        <div className="example-section">
+                                            <div className="example-title">🐍 Python (OpenAI Client)</div>
+                                            <code className="code-block">
 {`from openai import OpenAI
 
 client = OpenAI(
@@ -190,18 +287,18 @@ response = client.chat.completions.create(
     model="gpt-3.5-turbo",
     messages=[{"role": "user", "content": "Hello!"}]
 )`}
-                                    </code>
-                                    <button 
-                                        onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    api_key="${subscription.litellmKey}",\n    base_url="https://llm.p10p.io"\n)\n\nresponse = client.chat.completions.create(\n    model="gpt-3.5-turbo",\n    messages=[{"role": "user", "content": "Hello!"}]\n)`)}
-                                        className="copy-code-button"
-                                    >
-                                        📋 Copy Code
-                                    </button>
-                                </div>
-                                
-                                <div className="example-section">
-                                    <div className="example-title">🌐 cURL</div>
-                                    <code className="code-block">
+                                            </code>
+                                            <button 
+                                                onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    api_key="${subscription.litellmKey}",\n    base_url="https://llm.p10p.io"\n)\n\nresponse = client.chat.completions.create(\n    model="gpt-3.5-turbo",\n    messages=[{"role": "user", "content": "Hello!"}]\n)`)}
+                                                className="copy-code-button"
+                                            >
+                                                📋 Copy Code
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="example-section">
+                                            <div className="example-title">🌐 cURL</div>
+                                            <code className="code-block">
 {`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\
   -H "Authorization: Bearer ${subscription.litellmKey}" \\
   -H "Content-Type: application/json" \\
@@ -209,18 +306,18 @@ response = client.chat.completions.create(
     "model": "gpt-3.5-turbo",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'`}
-                                    </code>
-                                    <button 
-                                        onClick={() => copyToClipboard(`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\\n  -H "Authorization: Bearer ${subscription.litellmKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "gpt-3.5-turbo",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`)}
-                                        className="copy-code-button"
-                                    >
-                                        📋 Copy cURL
-                                    </button>
-                                </div>
-                                
-                                <div className="example-section">
-                                    <div className="example-title">🔗 JavaScript (fetch)</div>
-                                    <code className="code-block">
+                                            </code>
+                                            <button 
+                                                onClick={() => copyToClipboard(`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\\n  -H "Authorization: Bearer ${subscription.litellmKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "gpt-3.5-turbo",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`)}
+                                                className="copy-code-button"
+                                            >
+                                                📋 Copy cURL
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="example-section">
+                                            <div className="example-title">🔗 JavaScript (fetch)</div>
+                                            <code className="code-block">
 {`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {
   method: 'POST',
   headers: {
@@ -232,97 +329,109 @@ response = client.chat.completions.create(
     messages: [{role: 'user', content: 'Hello!'}]
   })
 });`}
-                                    </code>
-                                    <button 
-                                        onClick={() => copyToClipboard(`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {\n  method: 'POST',\n  headers: {\n    'Authorization': 'Bearer ${subscription.litellmKey}',\n    'Content-Type': 'application/json'\n  },\n  body: JSON.stringify({\n    model: 'gpt-3.5-turbo',\n    messages: [{role: 'user', content: 'Hello!'}]\n  })\n});`)}
-                                        className="copy-code-button"
-                                    >
-                                        📋 Copy JS
-                                    </button>
+                                            </code>
+                                            <button 
+                                                onClick={() => copyToClipboard(`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer ${subscription.litellmKey}',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: 'gpt-3.5-turbo',
+    messages: [{role: 'user', content: 'Hello!'}]
+  })
+});`)}
+                                                className="copy-code-button"
+                                            >
+                                                📋 Copy JS
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="supported-models">
+                                        <div className="models-title">🤖 Supported Models</div>
+                                        <div className="models-list">
+                                            <span className="model-tag">gpt-3.5-turbo</span>
+                                            <span className="model-tag">gpt-4</span>
+                                            <span className="model-tag">gpt-4-turbo</span>
+                                            <span className="model-tag">claude-3-sonnet</span>
+                                            <span className="model-tag">llama-2-70b</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            
-                            <div className="supported-models">
-                                <div className="models-title">🤖 Supported Models</div>
-                                <div className="models-list">
-                                    <span className="model-tag">gpt-3.5-turbo</span>
-                                    <span className="model-tag">gpt-4</span>
-                                    <span className="model-tag">gpt-4-turbo</span>
-                                    <span className="model-tag">claude-3-sonnet</span>
-                                    <span className="model-tag">llama-2-70b</span>
+
+                            <div className="model-breakdown">
+                                <h4>📊 Model Usage Breakdown</h4>
+                                <div className="model-grid">
+                                    {usageData.model_breakdown && Object.entries(usageData.model_breakdown).map(([model, data]) => (
+                                        <div key={model} className="model-card">
+                                            <div className="model-name">{model}</div>
+                                            <div className="model-stats">
+                                                <span>{formatNumber(data.requests)} requests</span>
+                                                <span>{formatNumber(data.tokens)} tokens</span>
+                                                <span>{formatCurrency(data.cost)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="model-breakdown">
-                        <h4>📊 Model Usage Breakdown</h4>
-                        <div className="model-grid">
-                            {Object.entries(usageData.model_breakdown || {}).map(([model, data]) => (
-                                <div key={model} className="model-card">
-                                    <div className="model-name">{model}</div>
-                                    <div className="model-stats">
-                                        <span>{formatNumber(data.requests)} requests</span>
-                                        <span>{formatNumber(data.tokens)} tokens</span>
-                                        <span>{formatCurrency(data.cost)}</span>
-                                    </div>
+                            <div className="recent-activity">
+                                <h4>🕒 Recent Activity</h4>
+                                <div className="activity-list">
+                                    {(usageData.recent_requests || []).slice(0, 5).map((request, index) => (
+                                        <div key={index} className="activity-item">
+                                            <div className="activity-main">
+                                                <span className="activity-model">{request.model}</span>
+                                                <span className="activity-tokens">{formatNumber(request.tokens)} tokens</span>
+                                            </div>
+                                            <div className="activity-meta">
+                                                <span className="activity-time">
+                                                    {new Date(request.timestamp).toLocaleString()}
+                                                </span>
+                                                <span className="activity-cost">{formatCurrency(request.cost)}</span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </div>
 
-                    <div className="recent-activity">
-                        <h4>🕒 Recent Activity</h4>
-                        <div className="activity-list">
-                            {usageData.recent_requests?.slice(0, 5).map((request, index) => (
-                                <div key={index} className="activity-item">
-                                    <div className="activity-main">
-                                        <span className="activity-model">{request.model}</span>
-                                        <span className="activity-tokens">{formatNumber(request.tokens)} tokens</span>
-                                    </div>
-                                    <div className="activity-meta">
-                                        <span className="activity-time">
-                                            {new Date(request.timestamp).toLocaleString()}
-                                        </span>
-                                        <span className="activity-cost">{formatCurrency(request.cost)}</span>
-                                    </div>
-                                </div>
-                            ))}
+                            <div className="subscription-actions">
+                                <button 
+                                    onClick={() => onUpdate && onUpdate(subscription)}
+                                    className="update-button"
+                                >
+                                    ⚙️ Update Settings
+                                </button>
+                                <button 
+                                    onClick={() => onTopUp && onTopUp(subscription)}
+                                    className="topup-button"
+                                >
+                                    💰 Add FLOW
+                                </button>
+                                <button 
+                                    onClick={() => setShowBridge(!showBridge)}
+                                    className="bridge-button"
+                                >
+                                    🌉 Cross-Chain Top-Up
+                                </button>
+                                <button 
+                                    onClick={fetchUsageData}
+                                    className="refresh-button"
+                                >
+                                    🔄 Refresh Usage
+                                </button>
+                                <button 
+                                    onClick={() => onDelete && onDelete(subscription)}
+                                    className="delete-button"
+                                >
+                                    🗑️ Delete Subscription
+                                </button>
+                            </div>
                         </div>
-                    </div>
-
-                    <div className="subscription-actions">
-                        <button 
-                            onClick={() => onUpdate && onUpdate(subscription)}
-                            className="update-button"
-                        >
-                            ⚙️ Update Settings
-                        </button>
-                        <button 
-                            onClick={() => onTopUp && onTopUp(subscription)}
-                            className="topup-button"
-                        >
-                            💰 Add FLOW
-                        </button>
-                        <button 
-                            onClick={() => setShowBridge(!showBridge)}
-                            className="bridge-button"
-                        >
-                            🌉 Cross-Chain Top-Up
-                        </button>
-                        <button 
-                            onClick={fetchUsageData}
-                            className="refresh-button"
-                        >
-                            🔄 Refresh Usage
-                        </button>
-                        <button 
-                            onClick={() => onDelete && onDelete(subscription)}
-                            className="delete-button"
-                        >
-                            🗑️ Delete Subscription
-                        </button>
-                    </div>
+                    )}
                 </div>
             )}
 

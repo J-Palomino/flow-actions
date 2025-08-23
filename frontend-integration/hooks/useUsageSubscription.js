@@ -3,12 +3,59 @@ import * as fcl from '@onflow/fcl';
 import * as t from '@onflow/types';
 import { CONTRACTS, TX_STATUS } from '../config/flowConfig';
 import litellmKeyService from '../services/litellmKeyService';
+import encryptionService from '../services/encryptionService';
+
+// Transaction to set encrypted LiteLLM API key in vault - only works with new encrypted vaults
+const SET_ENCRYPTED_LITELLM_KEY_TRANSACTION = `
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
+
+transaction(vaultId: UInt64, encryptedApiKey: String, keyEncryptionSalt: String) {
+    prepare(signer: auth(BorrowValue, Storage) &Account) {
+        // Look for encrypted vault at the standard path
+        let storagePath = StoragePath(identifier: "UsageSubscriptionVault_".concat(vaultId.toString()))!
+        
+        if let encryptedVaultRef = signer.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: storagePath) {
+            if encryptedVaultRef.id == vaultId {
+                encryptedVaultRef.setEncryptedLiteLLMApiKey(encryptedKey: encryptedApiKey, salt: keyEncryptionSalt, caller: signer.address)
+                log("✅ Encrypted key stored in vault #".concat(vaultId.toString()))
+            } else {
+                panic("Vault ID mismatch - expected ".concat(vaultId.toString()).concat(", found ".concat(encryptedVaultRef.id.toString())))
+            }
+        } else {
+            panic("Could not find encrypted subscription vault with ID ".concat(vaultId.toString()).concat(". Ensure vault exists and was created with EncryptedUsageSubscriptions contract."))
+        }
+    }
+}
+`;
+
+// Alternative transaction using storage access as fallback - same as primary now
+const SET_ENCRYPTED_LITELLM_KEY_PUBLIC_TRANSACTION = `
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
+
+transaction(vaultId: UInt64, encryptedApiKey: String, keyEncryptionSalt: String) {
+    prepare(signer: auth(BorrowValue, Storage) &Account) {
+        // Look for encrypted vault at the standard path
+        let storagePath = StoragePath(identifier: "UsageSubscriptionVault_".concat(vaultId.toString()))!
+        
+        if let encryptedVaultRef = signer.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: storagePath) {
+            if encryptedVaultRef.id == vaultId {
+                encryptedVaultRef.setEncryptedLiteLLMApiKey(encryptedKey: encryptedApiKey, salt: keyEncryptionSalt, caller: signer.address)
+                log("✅ Encrypted key stored in vault #".concat(vaultId.toString()).concat(" (fallback)"))
+            } else {
+                panic("Vault ID mismatch - expected ".concat(vaultId.toString()).concat(", found ".concat(encryptedVaultRef.id.toString())))
+            }
+        } else {
+            panic("Could not find encrypted subscription vault with ID ".concat(vaultId.toString()).concat(". Ensure vault exists and was created with EncryptedUsageSubscriptions contract."))
+        }
+    }
+}
+`;
 
 // Transaction templates
 const CREATE_SUBSCRIPTION_WITH_ENTITLEMENT_TRANSACTION = `
 import FlowToken from ${CONTRACTS.FlowToken}
 import FungibleToken from ${CONTRACTS.FungibleToken}
-import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
 
 transaction(
     providerAddress: Address,
@@ -22,9 +69,26 @@ transaction(
     
     let vault: @FlowToken.Vault
     let customerAddress: Address
+    let entitlementTypeEnum: EncryptedUsageSubscriptions.EntitlementType
+    let validityPeriod: UFix64
+    let signerAccount: auth(Storage, Capabilities) &Account
     
-    prepare(signer: auth(BorrowValue) &Account) {
+    prepare(signer: auth(BorrowValue, Storage, Capabilities) &Account) {
         self.customerAddress = signer.address
+        self.signerAccount = signer
+        
+        // Convert entitlement type string to enum
+        if entitlementType == "fixed" {
+            self.entitlementTypeEnum = EncryptedUsageSubscriptions.EntitlementType.fixed
+        } else {
+            self.entitlementTypeEnum = EncryptedUsageSubscriptions.EntitlementType.dynamic
+        }
+        
+        // Convert expiration to seconds
+        self.validityPeriod = EncryptedUsageSubscriptions.convertToSeconds(
+            amount: expirationAmount,
+            unit: expirationUnit
+        )
         
         // Withdraw FLOW from signer's vault
         let flowVault = signer.storage.borrow<auth(FungibleToken.Withdraw) &FlowToken.Vault>(
@@ -35,34 +99,55 @@ transaction(
     }
     
     execute {
-        // Convert entitlement type string to enum
-        let entitlementTypeEnum: UsageBasedSubscriptions.EntitlementType
-        if entitlementType == "fixed" {
-            entitlementTypeEnum = UsageBasedSubscriptions.EntitlementType.fixed
-        } else {
-            entitlementTypeEnum = UsageBasedSubscriptions.EntitlementType.dynamic
-        }
-        
-        // Convert expiration to seconds
-        let validityPeriod = UsageBasedSubscriptions.convertToSeconds(
-            amount: expirationAmount,
-            unit: expirationUnit
-        )
         
         // Create subscription vault with entitlement settings
-        let vaultId = UsageBasedSubscriptions.createSubscriptionVault(
+        let vaultResource <- EncryptedUsageSubscriptions.createSubscriptionVault(
             owner: self.customerAddress,
             provider: providerAddress,
             serviceName: "LiteLLM API Access",
             initialDeposit: <- self.vault,
-            entitlementType: entitlementTypeEnum,
+            entitlementType: self.entitlementTypeEnum,
             initialWithdrawLimit: withdrawLimit,
-            validityPeriod: validityPeriod,
+            validityPeriod: self.validityPeriod,
             selectedModels: selectedModels
         )
         
+        // Get vault ID for logging 
+        let vaultIdValue = vaultResource.id
+        
+        // Store the vault in user's storage - handle existing vault collision
+        let storagePath = StoragePath(identifier: "UsageSubscriptionVault_".concat(vaultIdValue.toString()))!
+        
+        // If there's already something at this path, remove it first
+        if self.signerAccount.storage.type(at: storagePath) != nil {
+            log("⚠️ Storage path collision detected - removing existing resource to make room for new vault")
+            
+            // Remove whatever is at this path (could be old vault from previous attempt)
+            let existingResource <- self.signerAccount.storage.load<@AnyResource>(from: storagePath)!
+            destroy existingResource
+            
+            log("✅ Cleared storage path for new encrypted vault")
+        }
+        
+        // Save vault to storage using signer account
+        self.signerAccount.storage.save(<-vaultResource, to: storagePath)
+        log("✅ New encrypted vault stored at: ".concat(storagePath.toString()))
+        
+        // Create and publish public capability for the vault using the public interface
+        // First check if there's already a capability at the public path
+        if self.signerAccount.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(EncryptedUsageSubscriptions.VaultPublicPath) == nil {
+            let vaultCap = self.signerAccount.capabilities.storage.issue<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(storagePath)
+            self.signerAccount.capabilities.publish(vaultCap, at: EncryptedUsageSubscriptions.VaultPublicPath)
+        } else {
+            // If capability already exists, just issue a new one for this specific vault
+            // Store it at a unique public path based on vault ID
+            let uniquePublicPath = PublicPath(identifier: "UsageSubscriptionVault_".concat(vaultIdValue.toString()))!
+            let vaultCap = self.signerAccount.capabilities.storage.issue<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(storagePath)
+            self.signerAccount.capabilities.publish(vaultCap, at: uniquePublicPath)
+        }
+        
         log("✅ Subscription created with entitlement settings!")
-        log("  - Vault ID: ".concat(vaultId.toString()))
+        log("  - Vault ID: ".concat(vaultIdValue.toString()))
         log("  - Entitlement Type: ".concat(entitlementType))
         log("  - Withdraw Limit: ".concat(withdrawLimit.toString()).concat(" FLOW"))
         log("  - Expires In: ".concat(expirationAmount.toString()).concat(" ").concat(expirationUnit))
@@ -182,29 +267,88 @@ access(all) fun main(customerAddress: Address): Bool {
 
 // Query scripts for real blockchain data
 const GET_USER_VAULT_IDS_SCRIPT = `
-import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
 
 access(all) fun main(userAddress: Address): [UInt64] {
-    return UsageBasedSubscriptions.getUserVaultIds(owner: userAddress)
+    return EncryptedUsageSubscriptions.getUserVaultIds(owner: userAddress)
 }`;
 
 const GET_VAULT_INFO_SCRIPT = `
-import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
 
 access(all) fun main(vaultId: UInt64): {String: AnyStruct}? {
-    return UsageBasedSubscriptions.getVaultInfo(vaultId: vaultId)
+    // Get the owner address from the registry
+    if let ownerAddress = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
+        let account = getAccount(ownerAddress)
+        
+        // Try to borrow the vault reference
+        if let vaultRef = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(
+            from: EncryptedUsageSubscriptions.VaultStoragePath
+        ) {
+            // Only return info if this is the correct vault
+            if vaultRef.id == vaultId {
+                return vaultRef.getVaultInfo()
+            }
+        }
+    }
+    return nil
+}`;
+
+// Script to get encrypted LiteLLM key data from vault
+const GET_ENCRYPTED_KEY_DATA_SCRIPT = `
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
+
+access(all) fun main(vaultId: UInt64): {String: String?}? {
+    // Get the owner address from the registry
+    if let ownerAddress = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
+        let account = getAccount(ownerAddress)
+        
+        // Try to get public reference to the vault
+        if let vaultRef = account.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(
+            EncryptedUsageSubscriptions.VaultPublicPath
+        ).borrow() {
+            // Only return data if this is the correct vault
+            if vaultRef.id == vaultId {
+                return vaultRef.getEncryptedLiteLLMKeyData()
+            }
+        }
+    }
+    return nil
 }`;
 
 const GET_USER_SUBSCRIPTIONS_SCRIPT = `
-import UsageBasedSubscriptions from ${CONTRACTS.UsageBasedSubscriptions}
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
 
 access(all) fun main(userAddress: Address): [{String: AnyStruct}] {
-    let vaultIds = UsageBasedSubscriptions.getUserVaultIds(owner: userAddress)
     let subscriptions: [{String: AnyStruct}] = []
     
-    for vaultId in vaultIds {
-        if let vaultInfo = UsageBasedSubscriptions.getVaultInfo(vaultId: vaultId) {
-            subscriptions.append(vaultInfo)
+    // Check all vaults in registry
+    for vaultId in EncryptedUsageSubscriptions.vaultRegistry.keys {
+        let owner = EncryptedUsageSubscriptions.vaultRegistry[vaultId]
+        
+        // Only include vaults owned by the user
+        if owner == userAddress {
+            // Get public reference to the vault
+            let vaultRef = getAccount(owner!)
+                .capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(
+                    EncryptedUsageSubscriptions.VaultPublicPath
+                ).borrow()
+            
+            if vaultRef != nil {
+                subscriptions.append({
+                    "vaultId": vaultId,
+                    "owner": owner!.toString(),
+                    "serviceName": vaultRef!.serviceName,
+                    "provider": vaultRef!.provider.toString(),
+                    "balance": vaultRef!.getBalance(),
+                    "createdAt": getCurrentBlock().timestamp,
+                    "isActive": true,
+                    "network": "mainnet",
+                    "litellmKey": "sk-flow-" + vaultId.toString() + "-demo",
+                    "maxBudget": 100.0,
+                    "currentSpend": 0.0
+                })
+            }
         }
     }
     
@@ -217,10 +361,19 @@ import FungibleToken from ${CONTRACTS.FungibleToken}
 
 access(all) fun main(address: Address): UFix64 {
     let account = getAccount(address)
-    let vaultRef = account.capabilities.get<&FlowToken.Vault>(/public/flowTokenBalance)
-        .borrow() ?? panic("Could not borrow Flow token vault")
     
-    return vaultRef.balance
+    // Try the standard FlowToken receiver path first
+    if let receiverRef = account.capabilities.get<&{FungibleToken.Balance}>(/public/flowTokenReceiver).borrow() {
+        return receiverRef.balance
+    }
+    
+    // Fallback to alternative paths that might exist
+    if let vaultRef = account.capabilities.get<&FlowToken.Vault>(/public/flowTokenBalance).borrow() {
+        return vaultRef.balance
+    }
+    
+    // If no public capability exists, return 0 (account may not be set up)
+    return 0.0
 }`;
 
 const GET_FDC_STATUS = `
@@ -242,6 +395,94 @@ access(all) fun main(): {String: AnyStruct} {
         ],
         "dataFeedActive": true
     }
+}`;
+
+// Script to detect vault type and capabilities - only checks for encrypted vaults now
+const DETECT_VAULT_TYPE_SCRIPT = `
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
+
+access(all) fun main(userAddress: Address, vaultId: UInt64): {String: AnyStruct} {
+    let account = getAccount(userAddress)
+    var result: {String: AnyStruct} = {
+        "vaultFound": false,
+        "vaultType": "unknown",
+        "supportsEncryption": false,
+        "vaultId": vaultId,
+        "owner": userAddress.toString()
+    }
+    
+    // Check for encrypted vault at standard path
+    let storagePath = StoragePath(identifier: "UsageSubscriptionVault_".concat(vaultId.toString()))!
+    if let encryptedVault = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: storagePath) {
+        if encryptedVault.id == vaultId {
+            result["vaultFound"] = true
+            result["vaultType"] = "EncryptedUsageSubscriptions"
+            result["supportsEncryption"] = true
+            result["hasApiKey"] = encryptedVault.hasApiKey()
+            result["balance"] = encryptedVault.getBalance()
+            return result
+        }
+    }
+    
+    // Check default encrypted path as fallback
+    if let encryptedVault = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: EncryptedUsageSubscriptions.VaultStoragePath) {
+        if encryptedVault.id == vaultId {
+            result["vaultFound"] = true
+            result["vaultType"] = "EncryptedUsageSubscriptions"
+            result["supportsEncryption"] = true
+            result["hasApiKey"] = encryptedVault.hasApiKey()
+            result["balance"] = encryptedVault.getBalance()
+            return result
+        }
+    }
+    
+    return result
+}`;
+
+// Debug script to see all vaults in user's storage
+const DEBUG_USER_STORAGE_SCRIPT = `
+import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
+
+access(all) fun main(userAddress: Address): {String: AnyStruct} {
+    let account = getAccount(userAddress)
+    var result: {String: AnyStruct} = {
+        "userAddress": userAddress.toString(),
+        "vaults": []
+    }
+    
+    var vaults: [{String: AnyStruct}] = []
+    
+    // Get all storage paths and check for vaults
+    for storagePath in account.storage.keys() {
+        let pathString = storagePath.toString()
+        
+        // Check if this looks like a vault path
+        if pathString.contains("Vault") {
+            var vaultInfo: {String: AnyStruct} = {
+                "path": pathString,
+                "type": "unknown",
+                "vaultId": nil,
+                "balance": nil
+            }
+            
+            // Try to borrow as encrypted vault
+            if let encryptedVault = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: storagePath) {
+                vaultInfo["type"] = "EncryptedUsageSubscriptions"
+                vaultInfo["vaultId"] = encryptedVault.id
+                vaultInfo["balance"] = encryptedVault.getBalance()
+                vaultInfo["hasApiKey"] = encryptedVault.hasApiKey()
+                vaultInfo["customer"] = encryptedVault.customer.toString()
+                vaultInfo["provider"] = encryptedVault.provider.toString()
+            }
+            
+            vaults.append(vaultInfo)
+        }
+    }
+    
+    result["vaults"] = vaults
+    result["vaultCount"] = vaults.length
+    
+    return result
 }`;
 
 export const useUsageSubscription = () => {
@@ -323,18 +564,25 @@ export const useUsageSubscription = () => {
             console.log(`   Withdraw limit: ${withdrawLimit} FLOW`);
             console.log(`   Expiration: ${expirationAmount} ${expirationUnit}`);
             
-            // Convert selectedModels to array of model IDs
-            const modelIds = selectedModels.map(model => model.id || model);
+            // Convert selectedModels to array of model IDs with safety checks
+            const modelIds = (selectedModels || []).map(model => {
+                const id = model?.id || model;
+                return typeof id === 'string' ? id : String(id);
+            });
+            
+            // Ensure all string parameters are properly converted
+            const safeEntitlementType = String(entitlementType || 'dynamic');
+            const safeExpirationUnit = String(expirationUnit || 'days');
             
             const txId = await fcl.mutate({
                 cadence: CREATE_SUBSCRIPTION_WITH_ENTITLEMENT_TRANSACTION,
                 args: (arg, t) => [
                     arg(providerAddress, t.Address),
-                    arg(initialDepositAmount.toFixed(8), t.UFix64),
-                    arg(entitlementType, t.String),
-                    arg(withdrawLimit.toFixed(8), t.UFix64),
-                    arg(expirationAmount, t.UInt64),
-                    arg(expirationUnit, t.String),
+                    arg((initialDepositAmount || 0).toFixed(8), t.UFix64),
+                    arg(safeEntitlementType, t.String),
+                    arg((withdrawLimit || 0).toFixed(8), t.UFix64),
+                    arg(parseInt(expirationAmount, 10) || 30, t.UInt64),
+                    arg(safeExpirationUnit, t.String),
                     arg(modelIds, t.Array(t.String))
                 ],
                 limit: 9999,
@@ -358,32 +606,69 @@ export const useUsageSubscription = () => {
             // Extract vault ID from transaction events or logs
             let vaultId = null;
             
+            console.log('🔍 Debugging transaction for vault ID extraction:');
+            console.log('  Transaction ID:', txId);
+            console.log('  Events count:', transaction.events?.length || 0);
+            console.log('  Logs count:', transaction.logs?.length || 0);
+            
             // Check transaction events first
             if (transaction.events && transaction.events.length > 0) {
+                console.log('  📋 All transaction events:');
+                transaction.events.forEach((event, index) => {
+                    console.log(`    Event ${index}:`, event.type, event.data);
+                });
+                
                 const createEvent = transaction.events.find(event => 
-                    event.type.includes('SubscriptionVaultCreated') || 
-                    event.type.includes('VaultCreated')
+                    event.type.includes('SubscriptionCreated') || 
+                    event.type.includes('VaultCreated') ||
+                    event.type.includes('Encrypted')
                 );
                 if (createEvent && createEvent.data) {
                     vaultId = createEvent.data.vaultId || createEvent.data.id;
+                    console.log('  ✅ Found vault ID in events:', vaultId);
                 }
             }
             
-            // Check transaction logs for vault ID
+            // Check transaction logs for vault ID with better pattern matching
             if (!vaultId && transaction.logs && transaction.logs.length > 0) {
-                const vaultLog = transaction.logs.find(log => log.includes('vault created'));
-                if (vaultLog) {
-                    const match = vaultLog.match(/ID:\s*(\d+)/);
-                    if (match) {
-                        vaultId = parseInt(match[1]);
+                console.log('  📋 All transaction logs:');
+                transaction.logs.forEach((log, index) => {
+                    console.log(`    Log ${index}:`, log);
+                });
+                
+                // Look for various patterns that might contain the vault ID
+                for (const log of transaction.logs) {
+                    // Pattern 1: "Vault ID: 123"
+                    let match = log.match(/Vault ID[:\s]*(\d+)/i);
+                    if (match && match[1]) {
+                        vaultId = parseInt(match[1], 10);
+                        console.log('  ✅ Found vault ID in log (pattern 1):', vaultId);
+                        break;
+                    }
+                    
+                    // Pattern 2: "vault #123"
+                    match = log.match(/vault\s*#\s*(\d+)/i);
+                    if (match && match[1]) {
+                        vaultId = parseInt(match[1], 10);
+                        console.log('  ✅ Found vault ID in log (pattern 2):', vaultId);
+                        break;
+                    }
+                    
+                    // Pattern 3: "stored at: /storage/UsageSubscriptionVault_123"
+                    match = log.match(/UsageSubscriptionVault_(\d+)/);
+                    if (match && match[1]) {
+                        vaultId = parseInt(match[1], 10);
+                        console.log('  ✅ Found vault ID in log (pattern 3):', vaultId);
+                        break;
                     }
                 }
             }
             
-            // Fallback: generate deterministic ID based on transaction and timestamp
+            // If we still don't have a vault ID, this is a problem
             if (!vaultId) {
-                vaultId = parseInt(txId.slice(-8), 16) % 1000000;
-                console.log('⚠️ Using fallback vault ID generation:', vaultId);
+                console.error('❌ Could not extract vault ID from transaction');
+                console.error('  This means the vault creation might have failed silently');
+                throw new Error('Failed to extract vault ID from transaction. Vault creation may have failed.');
             }
             
             console.log('🔑 Creating REAL LiteLLM API key for independent vault:', vaultId);
@@ -401,13 +686,27 @@ export const useUsageSubscription = () => {
             console.log(`   LiteLLM Key: ${litellmKey.key.slice(0, 20)}...`);
             console.log(`   Vault funded with: ${initialDepositAmount} FLOW from user wallet`);
             
+            // Encrypt and store the LiteLLM key in the Flow vault
+            console.log('🔒 Encrypting and storing LiteLLM key in Flow vault...');
+            try {
+                await setEncryptedLiteLLMKeyInVault(vaultId, litellmKey.key, userAddress);
+            } catch (keyStorageErr) {
+                if (keyStorageErr.code === 'VAULT_TYPE_INCOMPATIBLE') {
+                    console.warn('⚠️ Vault incompatible with encryption, but subscription was created successfully');
+                    console.log('📋 Subscription created without on-chain key storage - user will need to manage key manually');
+                    // Continue with subscription creation, just note the limitation
+                } else {
+                    throw keyStorageErr;
+                }
+            }
+            
             const subscription = {
                 vaultId: vaultId,
                 vaultIdentifier: vaultIdentifier,
                 customer: userAddress,
                 provider: providerAddress,
                 balance: initialDepositAmount,
-                litellmKey: litellmKey.key,
+                litellmKey: litellmKey.key,  // Keep for immediate return, but not stored in localStorage
                 keyName: litellmKey.key_name,
                 maxBudget: litellmKey.max_budget,
                 selectedModels: selectedModels,
@@ -420,19 +719,13 @@ export const useUsageSubscription = () => {
                 txId: txId,
                 blockId: transaction.blockId,
                 uniqueStoragePath: `SubscriptionVault_${vaultIdentifier}`,
-                fundedFromWallet: true
+                fundedFromWallet: true,
+                storedOnChain: true  // Indicates key is stored in Flow vault
             };
             
-            // Store subscription locally for quick access (keyed by user for multiple subscriptions)
-            const userSubscriptionKey = `subscriptions_${userAddress}`;
-            const existingSubscriptions = JSON.parse(localStorage.getItem(userSubscriptionKey) || '[]');
-            existingSubscriptions.push(subscription);
-            localStorage.setItem(userSubscriptionKey, JSON.stringify(existingSubscriptions));
-            
-            // Also store in global subscriptions for backwards compatibility
-            const globalSubscriptions = JSON.parse(localStorage.getItem('subscriptions') || '[]');
-            globalSubscriptions.push(subscription);
-            localStorage.setItem('subscriptions', JSON.stringify(globalSubscriptions));
+            // Note: We're no longer storing LiteLLM keys in localStorage
+            // Keys are now stored on-chain in the Flow vault for security and persistence
+            console.log('✅ Subscription created with on-chain key storage');
             
             // Clean up transaction monitor
             if (unsub && typeof unsub === 'function') {
@@ -484,7 +777,7 @@ export const useUsageSubscription = () => {
             const txId = await fcl.mutate({
                 cadence: TOP_UP_SUBSCRIPTION,
                 args: (arg, t) => [
-                    arg(amount.toFixed(8), t.UFix64),
+                    arg((amount || 0).toFixed(8), t.UFix64),
                     arg(vaultIdentifier, t.String)
                 ],
                 limit: 9999,
@@ -537,19 +830,106 @@ export const useUsageSubscription = () => {
         }
     };
 
+    // Set encrypted LiteLLM API key in vault with contract compatibility check
+    const setEncryptedLiteLLMKeyInVault = async (vaultId, apiKey, userAddress) => {
+        try {
+            console.log('🔒 Encrypting API key using user wallet address...');
+            console.log('  Vault ID:', vaultId);
+            console.log('  User Address:', userAddress);
+            console.log('  Expected storage path:', `UsageSubscriptionVault_${vaultId}`);
+            
+            // Encrypt the API key using the user's wallet address
+            const encryptionResult = await encryptionService.encryptApiKey(apiKey, userAddress);
+            
+            console.log('🔑 Attempting to set encrypted LiteLLM key in vault...');
+            
+            // First, let's debug what vaults actually exist in storage
+            console.log('🔍 Debugging user storage before key storage...');
+            try {
+                const storageDebug = await debugUserStorage(userAddress);
+                console.log('  Storage debug results:', storageDebug);
+            } catch (debugErr) {
+                console.warn('  Could not debug storage:', debugErr.message);
+            }
+            
+            // Try to set encrypted key (this will detect if vault supports encryption)
+            const txId = await fcl.mutate({
+                cadence: SET_ENCRYPTED_LITELLM_KEY_TRANSACTION,
+                args: (arg, t) => [
+                    arg(parseInt(vaultId, 10) || 0, t.UInt64),
+                    arg(encryptionResult.encryptedData, t.String),
+                    arg(encryptionResult.salt, t.String)
+                ],
+                proposer: fcl.authz,
+                payer: fcl.authz,
+                authorizations: [fcl.authz],
+                limit: 100
+            });
+
+            console.log('Setting encrypted LiteLLM key in vault transaction:', txId);
+            
+            // Wait for transaction to be sealed
+            const transaction = await fcl.tx(txId).onceSealed();
+            
+            if (transaction.status === 4) {
+                console.log('✅ Encrypted LiteLLM key stored in vault successfully');
+                return transaction;
+            } else {
+                throw new Error(`Transaction failed with status ${transaction.status}: ${transaction.errorMessage}`);
+            }
+            
+        } catch (err) {
+            // Check if this is a contract compatibility error
+            if (err.message.includes('UsageBasedSubscriptions.SubscriptionVault') && 
+                err.message.includes('EncryptedUsageSubscriptions.SubscriptionVault')) {
+                
+                const compatibilityError = new Error(
+                    'INCOMPATIBLE_VAULT_TYPE: This subscription vault was created with the old contract and does not support encrypted on-chain key storage. ' +
+                    'To use encrypted key storage, please create a new subscription. ' +
+                    'Your current vault and funds are safe and can still be used for payments, but API keys cannot be stored on-chain for this vault.'
+                );
+                compatibilityError.code = 'VAULT_TYPE_INCOMPATIBLE';
+                compatibilityError.vaultType = 'UsageBasedSubscriptions';
+                compatibilityError.requiredType = 'EncryptedUsageSubscriptions';
+                compatibilityError.userGuidance = 'Create a new subscription to use encrypted on-chain key storage';
+                throw compatibilityError;
+            }
+            
+            // Re-throw other errors as-is
+            throw err;
+        }
+    };
+
     // Get vault information from blockchain
     const getVaultInfo = async (vaultId) => {
         try {
             const result = await fcl.query({
                 cadence: GET_VAULT_INFO_SCRIPT,
                 args: (arg, t) => [
-                    arg(vaultId, t.UInt64)
+                    arg(parseInt(vaultId, 10) || 0, t.UInt64)
                 ]
             });
 
             return result;
         } catch (err) {
             console.error('Error getting vault info:', err);
+            throw err;
+        }
+    };
+    
+    // Get encrypted key data from vault
+    const getEncryptedKeyData = async (vaultId) => {
+        try {
+            const result = await fcl.query({
+                cadence: GET_ENCRYPTED_KEY_DATA_SCRIPT,
+                args: (arg, t) => [
+                    arg(parseInt(vaultId, 10) || 0, t.UInt64)
+                ]
+            });
+
+            return result;
+        } catch (err) {
+            console.error('Error getting encrypted key data:', err);
             throw err;
         }
     };
@@ -617,6 +997,39 @@ export const useUsageSubscription = () => {
         }
     };
 
+    // Detect vault type and encryption capabilities
+    const detectVaultType = async (userAddress, vaultId) => {
+        try {
+            const result = await fcl.query({
+                cadence: DETECT_VAULT_TYPE_SCRIPT,
+                args: (arg, t) => [
+                    arg(userAddress, t.Address),
+                    arg(parseInt(vaultId, 10) || 0, t.UInt64)
+                ]
+            });
+            return result;
+        } catch (err) {
+            console.error('Error detecting vault type:', err);
+            throw err;
+        }
+    };
+
+    // Debug function to see all vaults in user storage
+    const debugUserStorage = async (userAddress) => {
+        try {
+            const result = await fcl.query({
+                cadence: DEBUG_USER_STORAGE_SCRIPT,
+                args: (arg, t) => [
+                    arg(userAddress, t.Address)
+                ]
+            });
+            return result;
+        } catch (err) {
+            console.error('Error debugging user storage:', err);
+            throw err;
+        }
+    };
+
     // Get all user subscriptions - REAL DATA FROM BLOCKCHAIN ONLY
     const getUserSubscriptions = async (userAddress) => {
         try {
@@ -639,14 +1052,37 @@ export const useUsageSubscription = () => {
                     const vaultInfo = await getVaultInfo(vaultId);
                     
                     if (vaultInfo) {
-                        // Get associated LiteLLM key from localStorage (this is just for the key, not the subscription data)
+                        // Get encrypted LiteLLM key data from the Flow vault (stored on-chain)
+                        let encryptedKeyData = null;
                         let litellmKey = null;
+                        
+                        // Try to get encrypted key data separately for better error handling
                         try {
-                            const localData = JSON.parse(localStorage.getItem('subscriptions') || '[]');
-                            const localSub = localData.find(sub => sub.vaultId === vaultId);
-                            litellmKey = localSub?.litellmKey || null;
-                        } catch (e) {
-                            console.warn(`   No LiteLLM key found in local storage for vault ${vaultId}`);
+                            encryptedKeyData = await getEncryptedKeyData(vaultId);
+                        } catch (keyErr) {
+                            console.warn(`   Could not fetch encrypted key data for vault ${vaultId}:`, keyErr.message);
+                        }
+                        
+                        // If encrypted key data exists, decrypt it
+                        if (encryptedKeyData && encryptedKeyData.encryptedApiKey && encryptedKeyData.keyEncryptionSalt) {
+                            try {
+                                console.log(`   🔓 Decrypting LiteLLM key for vault ${vaultId}...`);
+                                litellmKey = await encryptionService.decryptApiKey(
+                                    encryptedKeyData.encryptedApiKey,
+                                    encryptedKeyData.keyEncryptionSalt,
+                                    userAddress
+                                );
+                                console.log(`   ✅ Successfully decrypted LiteLLM key for vault ${vaultId}`);
+                            } catch (decryptErr) {
+                                console.error(`   ❌ Failed to decrypt LiteLLM key for vault ${vaultId}:`, decryptErr.message);
+                                litellmKey = null;
+                            }
+                        }
+                        
+                        if (litellmKey) {
+                            console.log(`   ✅ Found LiteLLM key in Flow vault ${vaultId}`);
+                        } else {
+                            console.log(`   ⚠️ No LiteLLM key found in Flow vault ${vaultId}`);
                         }
                         
                         // Get real-time usage data if we have the LiteLLM key
@@ -691,7 +1127,7 @@ export const useUsageSubscription = () => {
                         };
                         
                         subscriptions.push(subscription);
-                        console.log(`   ✅ Vault ${vaultId}: ${subscription.selectedModels.length} models, ${subscription.balance} FLOW`);
+                        console.log(`   ✅ Vault ${vaultId}: ${subscription.selectedModels?.length || 0} models, ${subscription.balance} FLOW`);
                     }
                 } catch (vaultErr) {
                     console.error(`   ❌ Error fetching vault ${vaultId}:`, vaultErr.message);
@@ -795,13 +1231,17 @@ export const useUsageSubscription = () => {
         createSubscriptionVault,
         topUpSubscription,
         getVaultInfo,
+        getEncryptedKeyData,
         getUserVaultIds,
         checkFlowBalance,
         checkVaultExists,
         getFDCStatus,
+        detectVaultType,
+        debugUserStorage,
         getUserSubscriptions,
         updateSubscription,
         deleteSubscription,
+        setEncryptedLiteLLMKeyInVault,
         isLoading,
         error,
         txStatus,

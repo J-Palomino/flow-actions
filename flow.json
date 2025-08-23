@@ -6,11 +6,29 @@
 				"testing": "0000000000000007"
 			}
 		},
+		"DynamicEntitlements": {
+			"source": "cadence/contracts/DynamicEntitlements.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"mainnet": "6daee039a7b9c2f0",
+				"testing": "0000000000000007",
+				"testnet": "7ee75d81c7229a61"
+			}
+		},
 		"ExampleConnectors": {
 			"source": "cadence/contracts/ExampleConnectors.cdc",
 			"aliases": {
 				"testing": "0000000000000007",
 				"testnet": "daac4c96b1ea362d"
+			}
+		},
+		"FTSOPriceFeedConnector": {
+			"source": "cadence/contracts/FTSOPriceFeedConnector.cdc",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7",
+				"mainnet": "6daee039a7b9c2f0",
+				"testing": "0000000000000007",
+				"testnet": "7ee75d81c7229a61"
 			}
 		},
 		"FlareFDCTriggers": {
@@ -27,15 +45,6 @@
 				"emulator": "f8d6e0586b0a20c7",
 				"testing": "0000000000000007",
 				"testnet": "7ee75d81c7229a61"
-			}
-		},
-		"DynamicEntitlements": {
-			"source": "cadence/contracts/DynamicEntitlements.cdc",
-			"aliases": {
-				"emulator": "f8d6e0586b0a20c7",
-				"testing": "0000000000000007",
-				"testnet": "7ee75d81c7229a61",
-				"mainnet": "6daee039a7b9c2f0"
 			}
 		},
 		"TestTokenMinter": {
@@ -63,17 +72,14 @@
 			"source": "cadence/contracts/UsageBasedSubscriptions.cdc",
 			"aliases": {
 				"emulator": "f8d6e0586b0a20c7",
+				"mainnet": "6daee039a7b9c2f0",
 				"testing": "0000000000000007",
-				"testnet": "7ee75d81c7229a61",
-				"mainnet": "6daee039a7b9c2f0"
+				"testnet": "7ee75d81c7229a61"
 			}
 		},
-		"FTSOPriceFeedConnector": {
-			"source": "cadence/contracts/FTSOPriceFeedConnector.cdc",
+		"EncryptedUsageSubscriptions": {
+			"source": "cadence/contracts/EncryptedUsageSubscriptions.cdc",
 			"aliases": {
-				"emulator": "f8d6e0586b0a20c7",
-				"testing": "0000000000000007",
-				"testnet": "7ee75d81c7229a61",
 				"mainnet": "6daee039a7b9c2f0"
 			}
 		}
@@ -658,12 +664,10 @@
 		},
 		"mainnet": {
 			"main": [
-				"ExampleConnectors",
 				"FlareFDCTriggers",
-				"LayerZeroConnectors",
-				"DynamicEntitlements",
+				"FTSOPriceFeedConnector",
 				"UsageBasedSubscriptions",
-				"FTSOPriceFeedConnector"
+				"EncryptedUsageSubscriptions"
 			]
 		},
 		"testnet": {

@@ -4,9 +4,9 @@ import "FlareFDCTriggers"
 import "FTSOPriceFeedConnector"
 import "DeFiActions"
 
-/// UsageBasedSubscriptions: Dynamic pricing based on real-time usage from LiteLLM via Flare Data Connector
-/// Automatically adjusts subscription costs and processes payments based on actual consumption
-access(all) contract UsageBasedSubscriptions {
+/// EncryptedUsageSubscriptions: Dynamic pricing with encrypted on-chain API key storage
+/// Includes real-time USD to FLOW conversion via Flare FTSO and secure API key management
+access(all) contract EncryptedUsageSubscriptions {
     
     /// Events
     access(all) event SubscriptionCreated(vaultId: UInt64, owner: Address, provider: Address)
@@ -146,6 +146,7 @@ access(all) contract UsageBasedSubscriptions {
         access(all) fun withdrawWithEntitlement(amount: UFix64): @{FungibleToken.Vault}
         access(all) fun getEncryptedLiteLLMKeyData(): {String: String?}
         access(all) fun hasApiKey(): Bool
+        access(all) fun setEncryptedLiteLLMApiKey(encryptedKey: String, salt: String, caller: Address)
     }
     
     /// Restricted interface for key management - only accessible to authorized parties
@@ -197,10 +198,10 @@ access(all) contract UsageBasedSubscriptions {
         /// Set encrypted LiteLLM API key - RESTRICTED ACCESS
         /// Only vault owner, provider, or contract can call this
         access(all) fun setEncryptedLiteLLMApiKey(encryptedKey: String, salt: String, caller: Address) {
-            // Access control: only allow owner, provider, or contract
+            // Access control: only allow owner or provider
             pre {
-                caller == self.customer || caller == self.provider || caller == self.account.address: 
-                "Only vault owner, provider, or contract can set encrypted API key"
+                caller == self.customer || caller == self.provider: 
+                "Only vault owner or provider can set encrypted API key"
             }
             
             self.encryptedApiKey = encryptedKey
@@ -239,7 +240,7 @@ access(all) contract UsageBasedSubscriptions {
             // Only process payment if there's NEW usage
             if UInt64(newTokens) > 0 || UInt64(newRequests) > 0 {
                 // Update pricing tier based on TOTAL usage
-                let newTier = UsageBasedSubscriptions.calculateTier(usage.totalTokens)
+                let newTier = EncryptedUsageSubscriptions.calculateTier(usage.totalTokens)
                 if newTier.name != self.currentTier.name {
                     emit UsageTierChanged(
                         vaultId: self.id,
@@ -516,8 +517,8 @@ access(all) contract UsageBasedSubscriptions {
             validityPeriod: UFix64,
             selectedModels: [String]
         ) {
-            self.id = UsageBasedSubscriptions.totalVaults
-            UsageBasedSubscriptions.totalVaults = UsageBasedSubscriptions.totalVaults + 1
+            self.id = EncryptedUsageSubscriptions.totalVaults
+            EncryptedUsageSubscriptions.totalVaults = EncryptedUsageSubscriptions.totalVaults + 1
             
             self.customer = owner
             self.provider = provider
@@ -526,7 +527,7 @@ access(all) contract UsageBasedSubscriptions {
             
             self.currentUsage = nil
             self.usageHistory = []
-            self.currentTier = UsageBasedSubscriptions.getDefaultTier()
+            self.currentTier = EncryptedUsageSubscriptions.getDefaultTier()
             
             // Initialize cumulative usage tracking
             self.lastPaidTokens = 0
@@ -572,7 +573,7 @@ access(all) contract UsageBasedSubscriptions {
             self.encryptedApiKey = nil
             self.keyEncryptionSalt = nil
             
-            UsageBasedSubscriptions.vaultRegistry[self.id] = owner
+            EncryptedUsageSubscriptions.vaultRegistry[self.id] = owner
         }
     }
     
@@ -605,7 +606,7 @@ access(all) contract UsageBasedSubscriptions {
             )
             
             // Update subscription vault
-            if let ownerAddress = UsageBasedSubscriptions.vaultRegistry[vaultId] {
+            if let ownerAddress = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
                 // Vault access should be done via transactions with proper authorization
                 log("Usage update requested for vault ID: ".concat(vaultId.toString()))
                 return true
@@ -638,7 +639,7 @@ access(all) contract UsageBasedSubscriptions {
         
         /// Withdraw from customer vault based on entitlement
         access(all) fun collectPayment(vaultId: UInt64, amount: UFix64): @{FungibleToken.Vault}? {
-            if let ownerAddress = UsageBasedSubscriptions.vaultRegistry[vaultId] {
+            if let ownerAddress = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
                 // Vault access should be done via transactions with proper authorization
                 log("Payment collection requested for vault ID: ".concat(vaultId.toString()))
                 // Return nil for now - should be handled via transactions

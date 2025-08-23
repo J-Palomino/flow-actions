@@ -277,7 +277,7 @@ class LiteLLMKeyService {
                     timestamp: timestamp,
                     model: model,
                     tokens: tokens,
-                    cost: cost.toFixed(6),
+                    cost: (cost || 0).toFixed(6),
                     status: record.status || 'completed'
                 });
             });
@@ -296,12 +296,12 @@ class LiteLLMKeyService {
                 .slice(0, 20);
 
             // Fix cost formatting
-            processedData.usage_summary.total_cost = parseFloat(processedData.usage_summary.total_cost.toFixed(6));
+            processedData.usage_summary.total_cost = parseFloat((processedData.usage_summary.total_cost || 0).toFixed(6));
             Object.keys(processedData.model_breakdown).forEach(model => {
-                processedData.model_breakdown[model].cost = parseFloat(processedData.model_breakdown[model].cost.toFixed(6));
+                processedData.model_breakdown[model].cost = parseFloat((processedData.model_breakdown[model].cost || 0).toFixed(6));
             });
             processedData.daily_usage.forEach(day => {
-                day.cost = parseFloat(day.cost.toFixed(6));
+                day.cost = parseFloat((day.cost || 0).toFixed(6));
             });
 
             console.log('✅ REAL usage data processed successfully');

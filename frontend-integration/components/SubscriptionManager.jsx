@@ -26,7 +26,7 @@ const SubscriptionManager = () => {
     const [isConnected, setIsConnected] = useState(false);
     const [subscriptions, setSubscriptions] = useState([]);
     const [providerAddress, setProviderAddress] = useState('0x6daee039a7b9c2f0');
-    const [depositAmount, setDepositAmount] = useState('10.0');
+    const [depositAmount, setDepositAmount] = useState('0.001');
     const [flowBalance, setFlowBalance] = useState(null);
     const [fdcStatus, setFdcStatus] = useState(null);
     const [activeTab, setActiveTab] = useState('subscriptions');
@@ -88,11 +88,23 @@ const SubscriptionManager = () => {
             if (typeof fcl === 'undefined' || !fcl.authenticate) {
                 throw new Error('FCL not properly initialized');
             }
-            await fcl.authenticate();
+            
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Connection timeout')), 30000)
+            );
+            
+            const authPromise = fcl.authenticate();
+            
+            await Promise.race([authPromise, timeoutPromise]);
             console.log('✅ Flow wallet connection initiated');
         } catch (error) {
             console.error('❌ Flow wallet connection failed:', error);
-            alert(`Failed to connect wallet: ${error.message || 'Unknown error'}. Please try again.`);
+            if (error.message === 'Connection timeout') {
+                alert('Wallet connection timed out. Please refresh the page and try again.');
+            } else {
+                alert(`Failed to connect wallet: ${error.message || 'Unknown error'}. Please try again.`);
+            }
         }
     };
 
@@ -115,14 +127,18 @@ const SubscriptionManager = () => {
         // Check if user has sufficient balance
         const requiredAmount = parseFloat(depositAmount);
         if (flowBalance !== null && flowBalance < requiredAmount) {
-            alert(`Insufficient FLOW balance!\n\nRequired: ${requiredAmount} FLOW\nAvailable: ${flowBalance.toFixed(4)} FLOW\n\nPlease add more FLOW tokens to your wallet.`);
+            alert(`Insufficient FLOW balance!\n\nRequired: ${requiredAmount} FLOW\nAvailable: ${(flowBalance || 0).toFixed(4)} FLOW\n\nPlease add more FLOW tokens to your wallet.`);
             return;
         }
 
         const result = await createSubscriptionVault(
             providerAddress, 
             requiredAmount,
-            flowUser.addr
+            'dynamic',           // entitlementType: 'fixed' or 'dynamic'
+            50.0,               // withdrawLimit: max amount provider can withdraw
+            30,                 // expirationAmount: time value
+            'days',             // expirationUnit: 'days', 'hours', etc.
+            [{ id: 'gpt-3.5-turbo' }, { id: 'gpt-4' }] // default AI models
         );
         
         if (result.success) {
@@ -180,7 +196,7 @@ const SubscriptionManager = () => {
         }
 
         if (flowBalance !== null && flowBalance < amount) {
-            alert(`Insufficient FLOW balance!\n\nRequired: ${amount} FLOW\nAvailable: ${flowBalance.toFixed(4)} FLOW`);
+            alert(`Insufficient FLOW balance!\n\nRequired: ${amount} FLOW\nAvailable: ${(flowBalance || 0).toFixed(4)} FLOW`);
             return;
         }
 
@@ -239,7 +255,7 @@ const SubscriptionManager = () => {
                 {isConnected && flowUser?.addr ? (
                     <div className="wallet-connected">
                         <p>✅ Connected: {flowUser.addr}</p>
-                        <p>💰 FLOW Balance: {flowBalance !== null ? `${flowBalance.toFixed(4)} FLOW` : 'Loading...'}</p>
+                        <p>💰 FLOW Balance: {flowBalance !== null ? `${(flowBalance || 0).toFixed(4)} FLOW` : 'Loading...'}</p>
                         <button onClick={handleDisconnectWallet} className="disconnect-button">
                             Disconnect
                         </button>

@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import * as fcl from '@onflow/fcl';
 import { useUsageSubscription } from '../hooks/useUsageSubscription';
 import litellmKeyService from '../services/litellmKeyService';
+import priceService from '../services/priceService';
 
 const CreateSubscriptionForm = () => {
     const [user, setUser] = useState({ loggedIn: null });
     const [providerAddress, setProviderAddress] = useState('0xf8d6e0586b0a20c7'); // Default provider
-    const [depositAmount, setDepositAmount] = useState('100.0');
+    const [depositAmount, setDepositAmount] = useState('0.001');
+    const [depositAmountUSD, setDepositAmountUSD] = useState(null);
     const [flowBalance, setFlowBalance] = useState(null);
     const [vaultInfo, setVaultInfo] = useState(null);
     const [topUpAmount, setTopUpAmount] = useState('50.0');
@@ -52,6 +54,25 @@ const CreateSubscriptionForm = () => {
             if (unsubscribe) unsubscribe();
         };
     }, []);
+
+    // Calculate USD equivalent when deposit amount changes
+    useEffect(() => {
+        const calculateUSD = async () => {
+            if (depositAmount && !isNaN(parseFloat(depositAmount))) {
+                try {
+                    const usdValue = await priceService.convertFlowToUSD(depositAmount);
+                    setDepositAmountUSD(usdValue);
+                } catch (error) {
+                    console.error('Error calculating USD equivalent:', error);
+                    setDepositAmountUSD(null);
+                }
+            } else {
+                setDepositAmountUSD(null);
+            }
+        };
+
+        calculateUSD();
+    }, [depositAmount]);
 
     // Load user's Flow balance and vault info when connected
     useEffect(() => {
@@ -148,7 +169,8 @@ const CreateSubscriptionForm = () => {
         if (selectedModels.length === 0) return 0;
         
         // Estimate based on average costs and typical usage
-        const avgCostPer1k = selectedModels.reduce((sum, model) => sum + model.estimatedCostPer1kTokens, 0) / selectedModels.length;
+        const avgCostPer1k = selectedModels.length > 0 ? 
+            selectedModels.reduce((sum, model) => sum + (model.estimatedCostPer1kTokens || 0), 0) / selectedModels.length : 0;
         const estimatedMonthlyTokens = 100000; // Assume 100k tokens/month average
         const estimatedCost = (estimatedMonthlyTokens / 1000) * avgCostPer1k;
         
@@ -169,7 +191,7 @@ const CreateSubscriptionForm = () => {
             return;
         }
 
-        if (flowBalance === null || flowBalance < parseFloat(depositAmount)) {
+        if (flowBalance === null || flowBalance < parseFloat(depositAmount || '0')) {
             alert('Insufficient Flow balance');
             return;
         }
@@ -182,14 +204,14 @@ const CreateSubscriptionForm = () => {
         console.log('🚀 Starting subscription creation...');
         console.log('   User logged in:', user.loggedIn);
         console.log('   User address:', user.addr);
-        console.log('   Selected models:', selectedModels.length);
+        console.log('   Selected models:', selectedModels?.length || 0);
 
         const result = await createSubscriptionVault(
             providerAddress, 
             parseFloat(depositAmount),
             entitlementType,
             parseFloat(withdrawLimit),
-            parseInt(expirationAmount),
+            parseInt(expirationAmount || '30', 10) || 30,
             expirationUnit,
             selectedModels
         );
@@ -211,7 +233,7 @@ const CreateSubscriptionForm = () => {
             return;
         }
 
-        if (flowBalance < parseFloat(topUpAmount)) {
+        if (flowBalance < parseFloat(topUpAmount || '0')) {
             alert('Insufficient Flow balance');
             return;
         }
@@ -307,12 +329,18 @@ const CreateSubscriptionForm = () => {
                         </label>
                         <input
                             type="number"
-                            step="0.01"
+                            step="0.001"
                             value={depositAmount}
                             onChange={(e) => setDepositAmount(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                            placeholder="0.001"
                             required
                         />
+                        {depositAmountUSD !== null && (
+                            <p className="text-sm text-gray-600 mt-1">
+                                ≈ {priceService.formatUSD(depositAmountUSD)}
+                            </p>
+                        )}
                     </div>
 
                     {/* Entitlement Settings */}
@@ -413,8 +441,8 @@ const CreateSubscriptionForm = () => {
                             <>
                                 <div className="grid md:grid-cols-2 gap-3 mb-4">
                                     {availableModels.map((model) => {
-                                        const isSelected = selectedModels.some(m => m.id === model.id);
-                                        const canSelect = selectedModels.length < 3 || isSelected;
+                                        const isSelected = (selectedModels || []).some(m => m.id === model.id);
+                                        const canSelect = (selectedModels || []).length < 3 || isSelected;
                                         
                                         return (
                                             <div 
@@ -452,7 +480,7 @@ const CreateSubscriptionForm = () => {
                                                 </div>
                                                 <p className="text-xs text-gray-700 mb-2">{model.description}</p>
                                                 <div className="text-xs text-green-700 font-medium">
-                                                    ${model.estimatedCostPer1kTokens.toFixed(4)}/1K tokens
+                                                    ${(model.estimatedCostPer1kTokens || 0).toFixed(4)}/1K tokens
                                                 </div>
                                                 {isSelected && (
                                                     <div className="absolute top-2 right-2">
@@ -474,16 +502,16 @@ const CreateSubscriptionForm = () => {
                                         <h6 className="font-semibold text-gray-900">Selected Models ({selectedModels.length}/3)</h6>
                                         {selectedModels.length > 0 && (
                                             <span className="text-sm text-green-700 font-medium">
-                                                Est: ${estimatedMonthlyCost.toFixed(2)}/month
+                                                Est: ${(estimatedMonthlyCost || 0).toFixed(2)}/month
                                             </span>
                                         )}
                                     </div>
-                                    {selectedModels.length > 0 ? (
+                                    {(selectedModels || []).length > 0 ? (
                                         <div className="space-y-1">
-                                            {selectedModels.map(model => (
+                                            {(selectedModels || []).map(model => (
                                                 <div key={model.id} className="flex justify-between items-center text-sm">
                                                     <span>✅ {model.name}</span>
-                                                    <span className="text-gray-600">${model.estimatedCostPer1kTokens.toFixed(4)}/1K</span>
+                                                    <span className="text-gray-600">${(model.estimatedCostPer1kTokens || 0).toFixed(4)}/1K</span>
                                                 </div>
                                             ))}
                                             <div className="mt-2 pt-2 border-t border-gray-200">
@@ -550,9 +578,9 @@ const CreateSubscriptionForm = () => {
 
                     <button
                         type="submit"
-                        disabled={isLoading || !user.loggedIn || !user.addr || !flowBalance || flowBalance < parseFloat(depositAmount) || selectedModels.length === 0}
+                        disabled={isLoading || !user.loggedIn || !user.addr || !flowBalance || flowBalance < parseFloat(depositAmount || '0') || selectedModels.length === 0}
                         className={`w-full py-3 px-4 rounded-lg font-medium ${
-                            isLoading || !user.loggedIn || !user.addr || !flowBalance || flowBalance < parseFloat(depositAmount) || selectedModels.length === 0
+                            isLoading || !user.loggedIn || !user.addr || !flowBalance || flowBalance < parseFloat(depositAmount || '0') || selectedModels.length === 0
                                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 : 'bg-green-500 text-white hover:bg-green-600'
                         }`}
@@ -619,9 +647,9 @@ const CreateSubscriptionForm = () => {
                             </div>
                             <button
                                 type="submit"
-                                disabled={isLoading || !flowBalance || flowBalance < parseFloat(topUpAmount)}
+                                disabled={isLoading || !flowBalance || flowBalance < parseFloat(topUpAmount || '0')}
                                 className={`px-4 py-2 rounded font-medium ${
-                                    isLoading || !flowBalance || flowBalance < parseFloat(topUpAmount)
+                                    isLoading || !flowBalance || flowBalance < parseFloat(topUpAmount || '0')
                                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                         : 'bg-blue-500 text-white hover:bg-blue-600'
                                 }`}
@@ -630,7 +658,7 @@ const CreateSubscriptionForm = () => {
                             </button>
                         </form>
                         <p className="text-sm text-blue-700 mt-2">
-                            Your current balance: {flowBalance ? flowBalance.toFixed(2) : '...'} FLOW
+                            Your current balance: {flowBalance ? (flowBalance || 0).toFixed(2) : '...'} FLOW
                         </p>
                     </div>
 

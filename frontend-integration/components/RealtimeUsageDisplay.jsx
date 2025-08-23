@@ -102,13 +102,13 @@ const RealtimeUsageDisplay = ({ subscription }) => {
                         <div className="metric">
                             <span className="label">Already Paid:</span>
                             <span className="value confirmed-cost">
-                                ${hybridUsage.total.billableCost.toFixed(6)} FLOW
+                                ${(hybridUsage.total?.billableCost || 0).toFixed(6)} FLOW
                             </span>
                         </div>
                         <div className="metric">
                             <span className="label">Pending Payment:</span>
                             <span className="value pending-cost">
-                                ${hybridUsage.total.pendingBill.toFixed(6)} FLOW
+                                ${(hybridUsage.total?.pendingBill || 0).toFixed(6)} FLOW
                             </span>
                         </div>
                     </div>
@@ -133,7 +133,7 @@ const RealtimeUsageDisplay = ({ subscription }) => {
                             <div className="metric">
                                 <span className="label">Pending Bill:</span>
                                 <span className="value pending-cost">
-                                    ${hybridUsage.pending.cost.toFixed(6)}
+                                    ${(hybridUsage.pending?.cost || 0).toFixed(6)}
                                 </span>
                             </div>
                         </div>
@@ -163,7 +163,7 @@ const RealtimeUsageDisplay = ({ subscription }) => {
                             <div className="metric">
                                 <span className="label">Amount Paid:</span>
                                 <span className="value confirmed-cost">
-                                    ${hybridUsage.confirmed.cost.toFixed(6)} FLOW
+                                    ${(hybridUsage.confirmed?.cost || 0).toFixed(6)} FLOW
                                 </span>
                             </div>
                         </div>

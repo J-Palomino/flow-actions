@@ -6,7 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:ui": "node test-quick.js",
+    "test:ui:advanced": "node test-ui-improved.js",
+    "test:ui:basic": "node test-ui.js",
+    "test:ui:full": "node test-with-server.js",
+    "test:ui:headless": "HEADLESS=true node test-ui-improved.js",
+    "test:subscription": "node test-subscription-simple.js",
+    "test:subscription:advanced": "node test-subscription-native.js",
+    "test:record": "node test-recorder.js record",
+    "test:record:custom": "node test-recorder.js record",
+    "test:replay": "node test-recorder.js replay",
+    "test:list": "node test-recorder.js list"
   },
   "dependencies": {
     "@onflow/fcl": "^1.12.2",
@@ -22,6 +33,7 @@
     "eslint": "^8.0.0",
     "eslint-config-next": "^14.0.0",
     "postcss": "^8.0.0",
+    "puppeteer": "^21.11.0",
     "tailwindcss": "^3.0.0"
   },
   "keywords": [

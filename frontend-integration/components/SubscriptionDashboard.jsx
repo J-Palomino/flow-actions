@@ -21,7 +21,7 @@ const SubscriptionDashboard = () => {
 
     const [user, setUser] = useState(null);
     const [providerAddress, setProviderAddress] = useState('0x6daee039a7b9c2f0'); // Your mainnet address
-    const [depositAmount, setDepositAmount] = useState('10.0');
+    const [depositAmount, setDepositAmount] = useState('0.001');
     const [topUpAmount, setTopUpAmount] = useState('5.0');
     const [flowBalance, setFlowBalance] = useState(null);
     const [vaultInfo, setVaultInfo] = useState(null);
@@ -325,10 +325,10 @@ const SubscriptionDashboard = () => {
                             <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
                                 <h3>Current Subscription</h3>
                                 <p>Vault ID: #{vaultInfo.vaultId}</p>
-                                <p>Balance: {parseFloat(vaultInfo.balance).toFixed(4)} FLOW</p>
+                                <p>Balance: {parseFloat(vaultInfo.balance || 0).toFixed(4)} FLOW</p>
                                 <p>Current Tier: {vaultInfo.currentTier}</p>
-                                <p>Current Price: ${parseFloat(vaultInfo.currentPrice).toFixed(6)}/1K tokens</p>
-                                <p>Provider Can Withdraw: {parseFloat(vaultInfo.allowedWithdrawal).toFixed(4)} FLOW</p>
+                                <p>Current Price: ${parseFloat(vaultInfo.currentPrice || 0).toFixed(6)}/1K tokens</p>
+                                <p>Provider Can Withdraw: {parseFloat(vaultInfo.allowedWithdrawal || 0).toFixed(4)} FLOW</p>
                                 {vaultInfo.lastUsageTokens > 0 && (
                                     <p>Last Usage: {vaultInfo.lastUsageTokens} tokens</p>
                                 )}

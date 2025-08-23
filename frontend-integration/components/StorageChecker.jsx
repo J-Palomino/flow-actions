@@ -24,8 +24,8 @@ const StorageChecker = ({ userAddress }) => {
                 args: (arg, t) => [arg(userAddress, t.Address)]
             });
             
-            const availableBytes = parseInt(result.available);
-            const usedBytes = parseInt(result.used);
+            const availableBytes = parseInt(result.available || 0) || 0;
+            const usedBytes = parseInt(result.used || 0) || 0;
             const availableStorage = availableBytes - usedBytes;
             const storageNeeded = 5000; // Estimated bytes needed for subscription vault
             
@@ -67,9 +67,9 @@ const StorageChecker = ({ userAddress }) => {
             
             {storageInfo && (
                 <div>
-                    <p><strong>Storage Used:</strong> {(storageInfo.used / 1024).toFixed(2)} KB</p>
-                    <p><strong>Storage Available:</strong> {(storageInfo.available / 1024).toFixed(2)} KB</p>
-                    <p><strong>Free Space:</strong> {(storageInfo.free / 1024).toFixed(2)} KB</p>
+                    <p><strong>Storage Used:</strong> {((storageInfo.used || 0) / 1024).toFixed(2)} KB</p>
+                    <p><strong>Storage Available:</strong> {((storageInfo.available || 0) / 1024).toFixed(2)} KB</p>
+                    <p><strong>Free Space:</strong> {((storageInfo.free || 0) / 1024).toFixed(2)} KB</p>
                     
                     {storageInfo.needsMoreStorage ? (
                         <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#ffe6e6', borderRadius: '4px' }}>

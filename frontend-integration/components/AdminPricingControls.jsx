@@ -86,6 +86,11 @@ const AdminPricingControls = ({ account, onPricingUpdate }) => {
     };
 
     const calculateFinalPrice = (tierPrice, markup, modelMultiplier, volumeDiscount = 0) => {
+        // Add safety checks for undefined/null values
+        if (tierPrice == null || markup == null || modelMultiplier == null) {
+            return 0;
+        }
+        
         const withMarkup = tierPrice * (1 + markup / 100);
         const withModelMultiplier = withMarkup * modelMultiplier;
         const withVolumeDiscount = withModelMultiplier * (1 - volumeDiscount);
@@ -189,7 +194,7 @@ const AdminPricingControls = ({ account, onPricingUpdate }) => {
                             <div className="slider-value">{globalMarkup}%</div>
                         </div>
                         <div className="control-help">
-                            Multiplier: ×{(1 + globalMarkup/100).toFixed(2)}
+                            Multiplier: ×{(1 + (globalMarkup || 0)/100).toFixed(2)}
                         </div>
                     </div>
                 </section>
@@ -214,7 +219,7 @@ const AdminPricingControls = ({ account, onPricingUpdate }) => {
                                     className="price-input"
                                 />
                                 <div className="tier-volume-discount">
-                                    Volume Discount: {(volumeDiscounts[tier] * 100).toFixed(0)}%
+                                    Volume Discount: {((volumeDiscounts[tier] || 0) * 100).toFixed(0)}%
                                 </div>
                             </div>
                         ))}
@@ -241,7 +246,7 @@ const AdminPricingControls = ({ account, onPricingUpdate }) => {
                                         }))}
                                         className="multiplier-slider"
                                     />
-                                    <div className="multiplier-value">×{multiplier.toFixed(1)}</div>
+                                    <div className="multiplier-value">×{(multiplier || 0).toFixed(1)}</div>
                                 </div>
                             </div>
                         ))}
@@ -267,16 +272,16 @@ const AdminPricingControls = ({ account, onPricingUpdate }) => {
                                     <tr key={tier}>
                                         <td className="tier-name">{tier.charAt(0).toUpperCase() + tier.slice(1)}</td>
                                         <td className="price-cell">
-                                            {calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.gpt4, volumeDiscounts[tier]).toFixed(6)}
+                                            {(calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.gpt4, volumeDiscounts[tier]) || 0).toFixed(6)}
                                         </td>
                                         <td className="price-cell">
-                                            {calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.gpt35, volumeDiscounts[tier]).toFixed(6)}
+                                            {(calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.gpt35, volumeDiscounts[tier]) || 0).toFixed(6)}
                                         </td>
                                         <td className="price-cell">
-                                            {calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.claude, volumeDiscounts[tier]).toFixed(6)}
+                                            {(calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.claude, volumeDiscounts[tier]) || 0).toFixed(6)}
                                         </td>
                                         <td className="price-cell">
-                                            {calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.llama, volumeDiscounts[tier]).toFixed(6)}
+                                            {(calculateFinalPrice(basePrice, globalMarkup, modelMultipliers.llama, volumeDiscounts[tier]) || 0).toFixed(6)}
                                         </td>
                                     </tr>
                                 ))}

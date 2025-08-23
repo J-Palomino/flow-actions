@@ -172,7 +172,7 @@ const UsageDashboard = ({ vaultId, account }) => {
     };
 
     const formatCurrency = (amount) => {
-        return `${amount.toFixed(8)} FLOW`;
+        return `${(amount || 0).toFixed(8)} FLOW`;
     };
 
     const getTierColor = (tier) => {
@@ -271,7 +271,7 @@ const UsageDashboard = ({ vaultId, account }) => {
                             <span className="control-unit">%</span>
                         </div>
                         <div className="control-help">
-                            Current: {markupPercentage}% markup (×{(1 + markupPercentage/100).toFixed(2)} multiplier)
+                            Current: {markupPercentage}% markup (×{(1 + (markupPercentage || 0)/100).toFixed(2)} multiplier)
                         </div>
                     </div>
 
@@ -290,7 +290,7 @@ const UsageDashboard = ({ vaultId, account }) => {
                             <span className="control-unit">FLOW</span>
                         </div>
                         <div className="control-help">
-                            Final price: {(pricePerToken * (1 + markupPercentage/100)).toFixed(6)} FLOW/1K tokens
+                            Final price: {((pricePerToken || 0) * (1 + (markupPercentage || 0)/100)).toFixed(6)} FLOW/1K tokens
                         </div>
                     </div>
 
