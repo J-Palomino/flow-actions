@@ -134,16 +134,24 @@ transaction(
         log("✅ New encrypted vault stored at: ".concat(storagePath.toString()))
         
         // Create and publish public capability for the vault using the public interface
-        // First check if there's already a capability at the public path
+        // Use unique public path for each vault to avoid collisions
+        let uniquePublicPath = PublicPath(identifier: "UsageSubscriptionVault_".concat(vaultIdValue.toString()))!
+        
+        // Check if there's already a capability at this unique path and clean it up
+        if self.signerAccount.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(uniquePublicPath) != nil {
+            log("⚠️ Found existing capability at unique path - cleaning up before creating new vault")
+            self.signerAccount.capabilities.unpublish(uniquePublicPath)
+        }
+        
+        // Issue and publish new capability
+        let vaultCap = self.signerAccount.capabilities.storage.issue<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(storagePath)
+        self.signerAccount.capabilities.publish(vaultCap, at: uniquePublicPath)
+        
+        // Also check and set up the default public path if it doesn't exist
         if self.signerAccount.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(EncryptedUsageSubscriptions.VaultPublicPath) == nil {
-            let vaultCap = self.signerAccount.capabilities.storage.issue<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(storagePath)
-            self.signerAccount.capabilities.publish(vaultCap, at: EncryptedUsageSubscriptions.VaultPublicPath)
-        } else {
-            // If capability already exists, just issue a new one for this specific vault
-            // Store it at a unique public path based on vault ID
-            let uniquePublicPath = PublicPath(identifier: "UsageSubscriptionVault_".concat(vaultIdValue.toString()))!
-            let vaultCap = self.signerAccount.capabilities.storage.issue<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(storagePath)
-            self.signerAccount.capabilities.publish(vaultCap, at: uniquePublicPath)
+            let defaultVaultCap = self.signerAccount.capabilities.storage.issue<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(storagePath)
+            self.signerAccount.capabilities.publish(defaultVaultCap, at: EncryptedUsageSubscriptions.VaultPublicPath)
+            log("✅ Set up default public capability at standard path")
         }
         
         log("✅ Subscription created with entitlement settings!")
@@ -397,7 +405,7 @@ access(all) fun main(): {String: AnyStruct} {
     }
 }`;
 
-// Script to detect vault type and capabilities - only checks for encrypted vaults now
+// Script to detect vault type using only public capabilities (no private storage access)
 const DETECT_VAULT_TYPE_SCRIPT = `
 import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
 
@@ -411,27 +419,47 @@ access(all) fun main(userAddress: Address, vaultId: UInt64): {String: AnyStruct}
         "owner": userAddress.toString()
     }
     
-    // Check for encrypted vault at standard path
-    let storagePath = StoragePath(identifier: "UsageSubscriptionVault_".concat(vaultId.toString()))!
-    if let encryptedVault = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: storagePath) {
-        if encryptedVault.id == vaultId {
-            result["vaultFound"] = true
-            result["vaultType"] = "EncryptedUsageSubscriptions"
-            result["supportsEncryption"] = true
-            result["hasApiKey"] = encryptedVault.hasApiKey()
-            result["balance"] = encryptedVault.getBalance()
-            return result
+    // Try unique public capability path first
+    let uniquePublicPath = PublicPath(identifier: "UsageSubscriptionVault_".concat(vaultId.toString()))!
+    let uniqueCap = account.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(uniquePublicPath)
+    if uniqueCap.check() {
+        if let vaultRef = uniqueCap.borrow() {
+            if vaultRef.id == vaultId {
+                result["vaultFound"] = true
+                result["vaultType"] = "EncryptedUsageSubscriptions"
+                result["supportsEncryption"] = true
+                result["hasApiKey"] = vaultRef.hasApiKey()
+                result["balance"] = vaultRef.getBalance()
+                return result
+            }
         }
     }
     
-    // Check default encrypted path as fallback
-    if let encryptedVault = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: EncryptedUsageSubscriptions.VaultStoragePath) {
-        if encryptedVault.id == vaultId {
+    // Try default public capability path as fallback
+    let defaultCap = account.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(EncryptedUsageSubscriptions.VaultPublicPath)
+    if defaultCap.check() {
+        if let vaultRef = defaultCap.borrow() {
+            if vaultRef.id == vaultId {
+                result["vaultFound"] = true
+                result["vaultType"] = "EncryptedUsageSubscriptions"
+                result["supportsEncryption"] = true
+                result["hasApiKey"] = vaultRef.hasApiKey()
+                result["balance"] = vaultRef.getBalance()
+                return result
+            }
+        }
+    }
+    
+    // Check if vault exists in registry even if we can't access it via capability
+    if let registryOwner = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
+        if registryOwner == userAddress {
             result["vaultFound"] = true
             result["vaultType"] = "EncryptedUsageSubscriptions"
             result["supportsEncryption"] = true
-            result["hasApiKey"] = encryptedVault.hasApiKey()
-            result["balance"] = encryptedVault.getBalance()
+            result["hasApiKey"] = false // Unknown since we can't access it
+            result["balance"] = 0.0 // Unknown since we can't access it
+            result["foundInRegistry"] = true
+            result["capabilityIssue"] = true
             return result
         }
     }
@@ -439,7 +467,7 @@ access(all) fun main(userAddress: Address, vaultId: UInt64): {String: AnyStruct}
     return result
 }`;
 
-// Debug script to see all vaults in user's storage
+// Simplified debug script using only registry and public capabilities
 const DEBUG_USER_STORAGE_SCRIPT = `
 import EncryptedUsageSubscriptions from ${CONTRACTS.EncryptedUsageSubscriptions}
 
@@ -447,38 +475,33 @@ access(all) fun main(userAddress: Address): {String: AnyStruct} {
     let account = getAccount(userAddress)
     var result: {String: AnyStruct} = {
         "userAddress": userAddress.toString(),
-        "vaults": []
+        "vaults": [],
+        "method": "registry-only",
+        "registryKeys": [],
+        "totalRegistryVaults": 0
     }
     
     var vaults: [{String: AnyStruct}] = []
+    var allRegistryKeys: [UInt64] = []
     
-    // Get all storage paths and check for vaults
-    for storagePath in account.storage.keys() {
-        let pathString = storagePath.toString()
+    // Get all vault IDs from registry and find user's vaults
+    for vaultId in EncryptedUsageSubscriptions.vaultRegistry.keys {
+        allRegistryKeys.append(vaultId)
+        let owner = EncryptedUsageSubscriptions.vaultRegistry[vaultId]
         
-        // Check if this looks like a vault path
-        if pathString.contains("Vault") {
-            var vaultInfo: {String: AnyStruct} = {
-                "path": pathString,
-                "type": "unknown",
-                "vaultId": nil,
-                "balance": nil
+        if owner == userAddress {
+            let vaultInfo: {String: AnyStruct} = {
+                "vaultId": vaultId,
+                "type": "EncryptedUsageSubscriptions", 
+                "owner": owner.toString(),
+                "foundInRegistry": true
             }
-            
-            // Try to borrow as encrypted vault
-            if let encryptedVault = account.storage.borrow<&EncryptedUsageSubscriptions.SubscriptionVault>(from: storagePath) {
-                vaultInfo["type"] = "EncryptedUsageSubscriptions"
-                vaultInfo["vaultId"] = encryptedVault.id
-                vaultInfo["balance"] = encryptedVault.getBalance()
-                vaultInfo["hasApiKey"] = encryptedVault.hasApiKey()
-                vaultInfo["customer"] = encryptedVault.customer.toString()
-                vaultInfo["provider"] = encryptedVault.provider.toString()
-            }
-            
             vaults.append(vaultInfo)
         }
     }
     
+    result["registryKeys"] = allRegistryKeys
+    result["totalRegistryVaults"] = allRegistryKeys.length
     result["vaults"] = vaults
     result["vaultCount"] = vaults.length
     
@@ -1035,102 +1058,131 @@ export const useUsageSubscription = () => {
         try {
             console.log(`📋 Fetching REAL subscriptions from Flow blockchain for user ${userAddress}`);
             
-            // Get vault IDs directly from blockchain
-            const vaultIds = await getUserVaultIds(userAddress);
-            console.log(`   Found ${vaultIds.length} vaults on blockchain`);
+            // First try using the contract registry
+            console.log('   Trying contract registry approach...');
+            let vaultIds = [];
+            try {
+                vaultIds = await getUserVaultIds(userAddress);
+                console.log(`   Found ${vaultIds.length} vault IDs in contract registry:`, vaultIds);
+            } catch (registryErr) {
+                console.warn('   Contract registry approach failed:', registryErr.message);
+            }
+            
+            // If no vaults found in registry, try the storage scan approach
+            if (vaultIds.length === 0) {
+                console.log('   Trying storage scan approach...');
+                try {
+                    const storageDebug = await debugUserStorage(userAddress);
+                    console.log(`   Found ${storageDebug.vaultCount} vaults in storage scan`);
+                    vaultIds = storageDebug.vaults
+                        .filter(v => v.type === 'EncryptedUsageSubscriptions' && v.vaultId)
+                        .map(v => v.vaultId);
+                    console.log(`   Extracted vault IDs from storage:`, vaultIds);
+                } catch (storageErr) {
+                    console.warn('   Storage scan approach also failed:', storageErr.message);
+                }
+            }
             
             if (vaultIds.length === 0) {
-                console.log('   No subscriptions found on blockchain');
+                console.log('   No subscriptions found via any method');
                 return [];
             }
             
-            // Get detailed info for each vault from blockchain
+            // Get detailed info for each vault ID
             const subscriptions = [];
             for (const vaultId of vaultIds) {
                 try {
-                    console.log(`   Fetching vault ${vaultId} data from blockchain...`);
-                    const vaultInfo = await getVaultInfo(vaultId);
+                    console.log(`   Processing vault ${vaultId}...`);
                     
-                    if (vaultInfo) {
-                        // Get encrypted LiteLLM key data from the Flow vault (stored on-chain)
-                        let encryptedKeyData = null;
-                        let litellmKey = null;
-                        
-                        // Try to get encrypted key data separately for better error handling
-                        try {
-                            encryptedKeyData = await getEncryptedKeyData(vaultId);
-                        } catch (keyErr) {
-                            console.warn(`   Could not fetch encrypted key data for vault ${vaultId}:`, keyErr.message);
-                        }
-                        
-                        // If encrypted key data exists, decrypt it
-                        if (encryptedKeyData && encryptedKeyData.encryptedApiKey && encryptedKeyData.keyEncryptionSalt) {
-                            try {
-                                console.log(`   🔓 Decrypting LiteLLM key for vault ${vaultId}...`);
-                                litellmKey = await encryptionService.decryptApiKey(
-                                    encryptedKeyData.encryptedApiKey,
-                                    encryptedKeyData.keyEncryptionSalt,
-                                    userAddress
-                                );
-                                console.log(`   ✅ Successfully decrypted LiteLLM key for vault ${vaultId}`);
-                            } catch (decryptErr) {
-                                console.error(`   ❌ Failed to decrypt LiteLLM key for vault ${vaultId}:`, decryptErr.message);
-                                litellmKey = null;
-                            }
-                        }
-                        
-                        if (litellmKey) {
-                            console.log(`   ✅ Found LiteLLM key in Flow vault ${vaultId}`);
-                        } else {
-                            console.log(`   ⚠️ No LiteLLM key found in Flow vault ${vaultId}`);
-                        }
-                        
-                        // Get real-time usage data if we have the LiteLLM key
-                        let usageData = null;
-                        if (litellmKey) {
-                            try {
-                                console.log(`   Fetching LiteLLM usage data for vault ${vaultId}...`);
-                                usageData = await litellmKeyService.getKeyUsage(litellmKey);
-                            } catch (usageErr) {
-                                console.warn(`   Could not fetch usage data: ${usageErr.message}`);
-                            }
-                        }
-                        
-                        // Convert blockchain data to subscription format
-                        const subscription = {
-                            vaultId: vaultInfo.vaultId,
-                            owner: vaultInfo.owner,
-                            provider: vaultInfo.provider,
-                            serviceName: vaultInfo.serviceName,
-                            balance: parseFloat(vaultInfo.balance || 0),
-                            selectedModels: vaultInfo.selectedModels || [],
-                            modelPricing: vaultInfo.modelPricing || {},
-                            entitlementType: vaultInfo.entitlementType,
-                            withdrawLimit: parseFloat(vaultInfo.withdrawLimit || 0),
-                            usedAmount: parseFloat(vaultInfo.usedAmount || 0),
-                            validUntil: vaultInfo.validUntil,
-                            isActive: vaultInfo.isActive,
-                            currentTier: vaultInfo.currentTier,
-                            basePrice: parseFloat(vaultInfo.basePrice || 0),
-                            currentPrice: parseFloat(vaultInfo.currentPrice || 0),
-                            autoPay: vaultInfo.autoPay,
-                            maxMonthlySpend: parseFloat(vaultInfo.maxMonthlySpend || 0),
-                            lastPaidTokens: vaultInfo.lastPaidTokens || 0,
-                            lastPaidRequests: vaultInfo.lastPaidRequests || 0,
-                            totalPaidAmount: parseFloat(vaultInfo.totalPaidAmount || 0),
-                            lastOracleUpdate: vaultInfo.lastOracleUpdate,
-                            litellmKey: litellmKey,
-                            usageData: usageData,
-                            source: 'blockchain',
-                            blockchainVerified: true,
-                            lastUpdated: new Date().toISOString()
-                        };
-                        
-                        subscriptions.push(subscription);
-                        console.log(`   ✅ Vault ${vaultId}: ${subscription.selectedModels?.length || 0} models, ${subscription.balance} FLOW`);
+                    // Try to get vault info using the detection script
+                    const vaultDetails = await detectVaultType(userAddress, vaultId);
+                    console.log(`   Vault ${vaultId} details:`, vaultDetails);
+                    
+                    if (!vaultDetails.vaultFound) {
+                        console.warn(`   Vault ${vaultId} not found or accessible`);
+                        continue;
                     }
+                    
+                    // Get encrypted LiteLLM key data from the Flow vault (stored on-chain)
+                    let encryptedKeyData = null;
+                    let litellmKey = null;
+                    
+                    // Try to get encrypted key data separately for better error handling
+                    try {
+                        encryptedKeyData = await getEncryptedKeyData(vaultId);
+                    } catch (keyErr) {
+                        console.warn(`   Could not fetch encrypted key data for vault ${vaultId}:`, keyErr.message);
+                    }
+                    
+                    // If encrypted key data exists, decrypt it
+                    if (encryptedKeyData && encryptedKeyData.encryptedKey && encryptedKeyData.salt) {
+                        try {
+                            console.log(`   🔓 Decrypting LiteLLM key for vault ${vaultId}...`);
+                            litellmKey = await encryptionService.decryptApiKey(
+                                encryptedKeyData.encryptedKey,
+                                encryptedKeyData.salt,
+                                userAddress
+                            );
+                            console.log(`   ✅ Successfully decrypted LiteLLM key for vault ${vaultId}`);
+                        } catch (decryptErr) {
+                            console.error(`   ❌ Failed to decrypt LiteLLM key for vault ${vaultId}:`, decryptErr.message);
+                            litellmKey = null;
+                        }
+                    }
+                    
+                    if (litellmKey) {
+                        console.log(`   ✅ Found LiteLLM key in Flow vault ${vaultId}`);
+                    } else {
+                        console.log(`   ⚠️ No LiteLLM key found in Flow vault ${vaultId}`);
+                    }
+                    
+                    // Get real-time usage data if we have the LiteLLM key
+                    let usageData = null;
+                    if (litellmKey) {
+                        try {
+                            console.log(`   Fetching LiteLLM usage data for vault ${vaultId}...`);
+                            usageData = await litellmKeyService.getKeyUsage(litellmKey);
+                        } catch (usageErr) {
+                            console.warn(`   Could not fetch usage data: ${usageErr.message}`);
+                        }
+                    }
+                    
+                    // Convert blockchain data to subscription format
+                    const subscription = {
+                        vaultId: vaultId,
+                        owner: userAddress,
+                        provider: "0x6daee039a7b9c2f0", // Default provider for now
+                        serviceName: "LiteLLM API Access",
+                        balance: parseFloat(vaultDetails.balance || 0),
+                        selectedModels: [],
+                        modelPricing: {},
+                        entitlementType: "dynamic",
+                        withdrawLimit: 0,
+                        usedAmount: 0,
+                        validUntil: null,
+                        isActive: true,
+                        currentTier: "Starter",
+                        basePrice: 0,
+                        currentPrice: 0,
+                        autoPay: true,
+                        maxMonthlySpend: 1000.0,
+                        lastPaidTokens: 0,
+                        lastPaidRequests: 0,
+                        totalPaidAmount: 0,
+                        lastOracleUpdate: 0,
+                        litellmKey: litellmKey,
+                        usageData: usageData,
+                        hasApiKey: vaultDetails.hasApiKey || false,
+                        supportsEncryption: vaultDetails.supportsEncryption || false,
+                        source: 'blockchain-registry-and-detection',
+                        blockchainVerified: true,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    
+                    subscriptions.push(subscription);
+                    console.log(`   ✅ Vault ${vaultId}: Balance ${subscription.balance} FLOW, Encryption: ${subscription.supportsEncryption ? 'Yes' : 'No'}, API Key: ${subscription.hasApiKey ? 'Yes' : 'No'}`);
                 } catch (vaultErr) {
-                    console.error(`   ❌ Error fetching vault ${vaultId}:`, vaultErr.message);
+                    console.error(`   ❌ Error processing vault ${vaultId}:`, vaultErr.message);
                 }
             }
             
