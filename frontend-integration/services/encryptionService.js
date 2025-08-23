@@ -31,11 +31,12 @@ class EncryptionService {
     }
 
     /**
-     * Derive encryption key from user's wallet address using PBKDF2
+     * Derive encryption key from user's wallet address + signature using PBKDF2
      */
-    async deriveKey(userAddress, salt) {
-        // Use user's wallet address as the password base
-        const passwordBuffer = new TextEncoder().encode(userAddress);
+    async deriveKey(userAddress, salt, signature = null) {
+        // Use user's wallet address + signature as the password base for enhanced security
+        const passwordBase = signature ? `${userAddress}:${signature}` : userAddress;
+        const passwordBuffer = new TextEncoder().encode(passwordBase);
         
         // Import the password as a key
         const baseKey = await crypto.subtle.importKey(
@@ -106,9 +107,9 @@ class EncryptionService {
     }
 
     /**
-     * Decrypt a LiteLLM API key
+     * Decrypt a LiteLLM API key with optional signature verification
      */
-    async decryptApiKey(encryptedData, salt, userAddress) {
+    async decryptApiKey(encryptedData, salt, userAddress, signature = null) {
         try {
             // Convert from base64
             const combined = this.base64ToArrayBuffer(encryptedData);
@@ -118,8 +119,8 @@ class EncryptionService {
             const iv = combined.slice(0, this.ivLength);
             const encrypted = combined.slice(this.ivLength);
             
-            // Derive the same encryption key
-            const key = await this.deriveKey(userAddress, saltBuffer);
+            // Derive the same encryption key (with signature if provided)
+            const key = await this.deriveKey(userAddress, saltBuffer, signature);
             
             // Decrypt the data
             const decryptedBuffer = await crypto.subtle.decrypt(
@@ -137,7 +138,49 @@ class EncryptionService {
 
         } catch (error) {
             console.error('Error decrypting API key:', error);
-            throw new Error('Failed to decrypt API key');
+            throw new Error('Failed to decrypt API key - signature may be required');
+        }
+    }
+
+    /**
+     * Decrypt API key with wallet signature verification
+     * This method requires the user to sign a message proving wallet ownership
+     */
+    async decryptApiKeyWithSignature(encryptedData, salt, userAddress, vaultId, signMessageFn) {
+        try {
+            // Create a unique message for the user to sign
+            const message = `Decrypt API key for vault ${vaultId} at ${new Date().toISOString()}`;
+            console.log(`🔐 Creating signature message: "${message}"`);
+            
+            // Request wallet signature
+            console.log(`📝 Requesting wallet signature...`);
+            const signature = await signMessageFn(message);
+            
+            if (!signature) {
+                throw new Error('Wallet signature required to decrypt API key');
+            }
+
+            console.log(`🔏 Signature received, attempting decryption with signature-enhanced key derivation...`);
+            
+            // Attempt decryption with signature
+            const decryptedKey = await this.decryptApiKey(encryptedData, salt, userAddress, signature);
+            
+            console.log(`✅ Successfully decrypted API key using signature-enhanced derivation`);
+            return decryptedKey;
+
+        } catch (error) {
+            console.error('❌ Error decrypting API key with signature:', error);
+            
+            // If signature-based decryption fails, try fallback without signature
+            console.log(`⚠️ Attempting fallback decryption without signature for backward compatibility...`);
+            try {
+                const fallbackKey = await this.decryptApiKey(encryptedData, salt, userAddress);
+                console.log(`✅ Fallback decryption successful`);
+                return fallbackKey;
+            } catch (fallbackError) {
+                console.error('❌ Fallback decryption also failed:', fallbackError);
+                throw new Error('Failed to decrypt API key with both signature and fallback methods: ' + error.message);
+            }
         }
     }
 

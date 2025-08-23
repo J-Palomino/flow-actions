@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import litellmKeyService from '../services/litellmKeyService';
+import { useUsageSubscription } from '../hooks/useUsageSubscription';
+import * as fcl from '@onflow/fcl';
 
 const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [usageData, setUsageData] = useState(null);
@@ -8,6 +10,10 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [showDetails, setShowDetails] = useState(false);
     const [showApiKey, setShowApiKey] = useState(false);
     const [showBridge, setShowBridge] = useState(false);
+    const [decryptedApiKey, setDecryptedApiKey] = useState(null);
+    const [decryptingKey, setDecryptingKey] = useState(false);
+    
+    const { decryptVaultApiKey } = useUsageSubscription();
     
     // Show loading skeleton if no subscription data
     if (!subscription) {
@@ -29,27 +35,28 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     }
 
     useEffect(() => {
-        if (subscription?.litellmKey) {
+        // Only fetch usage data if we have a decrypted API key
+        if (decryptedApiKey) {
             fetchUsageData();
         }
-    }, [subscription?.litellmKey]);
+    }, [decryptedApiKey]);
 
     const fetchUsageData = async () => {
-        if (!subscription?.litellmKey) return;
+        if (!decryptedApiKey) return;
         
         setLoading(true);
         setError(null);
         
         try {
-            const usage = await litellmKeyService.getKeyUsage(subscription?.litellmKey);
+            const usage = await litellmKeyService.getKeyUsage(decryptedApiKey);
             setUsageData(usage);
         } catch (err) {
-            console.warn(`Usage data fetch failed for key ${subscription.litellmKey?.slice(0, 20)}:`, err.message);
+            console.warn(`Usage data fetch failed for key ${decryptedApiKey?.slice(0, 20)}:`, err.message);
             console.warn(`Full error:`, err);
             
             // Set empty usage data structure instead of error for new keys
             setUsageData({
-                key: subscription.litellmKey,
+                key: decryptedApiKey,
                 usage_summary: {
                     total_requests: 0,
                     total_tokens: 0,
@@ -102,6 +109,40 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
         // You could add a toast notification here
     };
 
+    // Decrypt API key with wallet signature
+    const handleDecryptApiKey = async () => {
+        if (!subscription?.hasApiKey || decryptingKey) {
+            return;
+        }
+
+        setDecryptingKey(true);
+        setError(null);
+        
+        try {
+            // Get current user address
+            const currentUser = await fcl.currentUser.snapshot();
+            if (!currentUser?.loggedIn || !currentUser?.addr) {
+                throw new Error('Please connect your wallet to decrypt API key');
+            }
+
+            console.log(`🔓 Requesting wallet signature to decrypt API key for vault ${subscription.vaultId}...`);
+            
+            // Decrypt the API key using wallet signature
+            const decryptedKey = await decryptVaultApiKey(subscription.vaultId, currentUser.addr);
+            
+            // Store the decrypted key
+            setDecryptedApiKey(decryptedKey);
+            
+            console.log(`✅ Successfully decrypted API key for vault ${subscription.vaultId}`);
+            
+        } catch (err) {
+            console.error('❌ Failed to decrypt API key:', err);
+            setError(`Failed to decrypt API key: ${err.message}`);
+        } finally {
+            setDecryptingKey(false);
+        }
+    };
+
     return (
         <div className="subscription-tile">
             <div className="tile-header">
@@ -142,6 +183,12 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                         <span className="error-icon">⚠️</span>
                         <span>{error}</span>
                         <button onClick={fetchUsageData} className="retry-button">Retry</button>
+                    </div>
+                )}
+
+                {!usageData && !loading && !error && (
+                    <div className="no-usage-state">
+                        <span>🔒 Decrypt API key to view usage data</span>
                     </div>
                 )}
 
@@ -218,9 +265,11 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
 
                     {/* Debug Info */}
                     <div className="debug-section" style={{ fontSize: '12px', color: '#666', padding: '10px', background: '#f8f8f8', marginBottom: '10px', borderRadius: '4px' }}>
-                        <p><strong>Debug Info:</strong></p>
-                        <p>Has LiteLLM Key: {subscription?.litellmKey ? '✅ Yes' : '❌ No'}</p>
-                        {subscription?.litellmKey && <p>Key Preview: {subscription.litellmKey.slice(0, 30)}...</p>}
+                        <p><strong>Security Debug Info:</strong></p>
+                        <p>Has Encrypted Key: {subscription?.hasApiKey ? '✅ Yes' : '❌ No'}</p>
+                        <p>Key Decrypted: {decryptedApiKey ? '✅ Yes' : '❌ No'}</p>
+                        <p>Requires Signature: {subscription?.requiresSignature ? '✅ Yes (Secure)' : '❌ No'}</p>
+                        {decryptedApiKey && <p>Key Preview: {decryptedApiKey.slice(0, 20)}...</p>}
                         <p>Usage Data State: {loading ? '⏳ Loading...' : usageData ? '✅ Loaded' : '❌ No Data'}</p>
                         {error && <p style={{ color: 'red' }}>Error: {error}</p>}
                         {usageData?._fetchError && <p style={{ color: 'orange' }}>Fetch Error: {usageData._fetchError}</p>}
@@ -228,13 +277,45 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                         <p>Cost: ${usageData?.usage_summary?.total_cost || 0}</p>
                     </div>
 
-                    {usageData && (
-                        <div className="usage-data-section">
-                            <div className="api-key-section">
-                                <h4>🔑 Your LiteLLM API Key</h4>
+                    {/* API Key Section - Shows decrypt button or decrypted key */}
+                    <div className="api-key-section" style={{ marginBottom: '24px' }}>
+                        <h4>🔑 Your LiteLLM API Key</h4>
+                        
+                        {!decryptedApiKey && subscription?.hasApiKey && (
+                            <div className="decrypt-key-prompt">
+                                <p>🔒 Your API key is encrypted on-chain for security.</p>
+                                <p>Click below to decrypt with wallet signature:</p>
+                                <button 
+                                    onClick={handleDecryptApiKey}
+                                    disabled={decryptingKey || !subscription?.hasApiKey}
+                                    className="decrypt-button"
+                                    style={{
+                                        padding: '12px 24px',
+                                        background: decryptingKey ? '#6B7280' : '#059669',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: decryptingKey ? 'not-allowed' : 'pointer',
+                                        fontSize: '14px',
+                                        fontWeight: '600',
+                                        marginTop: '8px'
+                                    }}
+                                >
+                                    {decryptingKey ? '🔓 Decrypting...' : '🔓 Decrypt API Key'}
+                                </button>
+                                {error && (
+                                    <p style={{ color: '#DC2626', marginTop: '8px', fontSize: '14px' }}>
+                                        ❌ {error}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {decryptedApiKey && (
+                            <div className="decrypted-key-section">
                                 <div className="api-key-display">
                                     <code className="api-key">
-                                        {showApiKey ? subscription.litellmKey : subscription.litellmKey?.replace(/sk-(.+)/, 'sk-' + '•'.repeat(20))}
+                                        {showApiKey ? decryptedApiKey : decryptedApiKey?.replace(/sk-(.+)/, 'sk-' + '•'.repeat(20))}
                                     </code>
                                     <div className="key-actions">
                                         <button 
@@ -244,7 +325,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                                             {showApiKey ? '👁️‍🗨️ Hide' : '👁️ Show Key'}
                                         </button>
                                         <button 
-                                            onClick={() => copyToClipboard(subscription.litellmKey)}
+                                            onClick={() => copyToClipboard(decryptedApiKey)}
                                             className="copy-button"
                                         >
                                             📋 Copy Key
@@ -253,7 +334,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                                 </div>
                                 <div className="key-info">
                                     <span>Budget: ${subscription.maxBudget || 100}/month</span>
-                                    <span>Spent: {formatCurrency(usageData.usage_summary?.total_cost)}</span>
+                                    <span>Spent: {formatCurrency(usageData?.usage_summary?.total_cost || 0)}</span>
                                     <span>Status: 🟢 Active</span>
                                 </div>
                                 
@@ -279,7 +360,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
 {`from openai import OpenAI
 
 client = OpenAI(
-    api_key="${subscription.litellmKey}",
+    api_key="${decryptedApiKey}",
     base_url="https://llm.p10p.io"
 )
 
@@ -289,7 +370,7 @@ response = client.chat.completions.create(
 )`}
                                             </code>
                                             <button 
-                                                onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    api_key="${subscription.litellmKey}",\n    base_url="https://llm.p10p.io"\n)\n\nresponse = client.chat.completions.create(\n    model="gpt-3.5-turbo",\n    messages=[{"role": "user", "content": "Hello!"}]\n)`)}
+                                                onClick={() => copyToClipboard(`from openai import OpenAI\n\nclient = OpenAI(\n    api_key="${decryptedApiKey}",\n    base_url="https://llm.p10p.io"\n)\n\nresponse = client.chat.completions.create(\n    model="gpt-3.5-turbo",\n    messages=[{"role": "user", "content": "Hello!"}]\n)`)}
                                                 className="copy-code-button"
                                             >
                                                 📋 Copy Code
@@ -300,7 +381,7 @@ response = client.chat.completions.create(
                                             <div className="example-title">🌐 cURL</div>
                                             <code className="code-block">
 {`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\
-  -H "Authorization: Bearer ${subscription.litellmKey}" \\
+  -H "Authorization: Bearer ${decryptedApiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "gpt-3.5-turbo",
@@ -308,7 +389,7 @@ response = client.chat.completions.create(
   }'`}
                                             </code>
                                             <button 
-                                                onClick={() => copyToClipboard(`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\\n  -H "Authorization: Bearer ${subscription.litellmKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "gpt-3.5-turbo",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`)}
+                                                onClick={() => copyToClipboard(`curl -X POST "https://llm.p10p.io/v1/chat/completions" \\\n  -H "Authorization: Bearer ${decryptedApiKey}" \\\n  -H "Content-Type: application/json" \\\n  -d '{\n    "model": "gpt-3.5-turbo",\n    "messages": [{"role": "user", "content": "Hello!"}]\n  }'`)}
                                                 className="copy-code-button"
                                             >
                                                 📋 Copy cURL
@@ -321,7 +402,7 @@ response = client.chat.completions.create(
 {`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ${subscription.litellmKey}',
+    'Authorization': 'Bearer ${decryptedApiKey}',
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
@@ -334,7 +415,7 @@ response = client.chat.completions.create(
                                                 onClick={() => copyToClipboard(`const response = await fetch('https://llm.p10p.io/v1/chat/completions', {
   method: 'POST',
   headers: {
-    'Authorization': 'Bearer ${subscription.litellmKey}',
+    'Authorization': 'Bearer ${decryptedApiKey}',
     'Content-Type': 'application/json'
   },
   body: JSON.stringify({
@@ -361,7 +442,17 @@ response = client.chat.completions.create(
                                     </div>
                                 </div>
                             </div>
+                        )}
+                        
+                        {!subscription?.hasApiKey && (
+                            <div className="no-api-key">
+                                <p>❌ This vault does not have an encrypted API key stored.</p>
+                            </div>
+                        )}
+                    </div>
 
+                    {usageData && (
+                        <div className="usage-data-section">
                             <div className="model-breakdown">
                                 <h4>📊 Model Usage Breakdown</h4>
                                 <div className="model-grid">
@@ -551,13 +642,18 @@ response = client.chat.completions.create(
                     min-height: 80px;
                 }
 
-                .loading-state, .error-state {
+                .loading-state, .error-state, .no-usage-state {
                     display: flex;
                     align-items: center;
                     gap: 12px;
                     padding: 20px;
                     text-align: center;
                     justify-content: center;
+                }
+
+                .no-usage-state {
+                    color: #6B7280;
+                    font-style: italic;
                 }
 
                 .spinner {

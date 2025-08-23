@@ -311,7 +311,18 @@ access(all) fun main(vaultId: UInt64): {String: String?}? {
     if let ownerAddress = EncryptedUsageSubscriptions.vaultRegistry[vaultId] {
         let account = getAccount(ownerAddress)
         
-        // Try to get public reference to the vault
+        // Try unique public capability path first (this is where each vault is published)
+        let uniquePublicPath = PublicPath(identifier: "UsageSubscriptionVault_".concat(vaultId.toString()))!
+        let uniqueCap = account.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(uniquePublicPath)
+        if uniqueCap.check() {
+            if let vaultRef = uniqueCap.borrow() {
+                if vaultRef.id == vaultId {
+                    return vaultRef.getEncryptedLiteLLMKeyData()
+                }
+            }
+        }
+        
+        // Fallback to default public path
         if let vaultRef = account.capabilities.get<&{EncryptedUsageSubscriptions.SubscriptionVaultPublic}>(
             EncryptedUsageSubscriptions.VaultPublicPath
         ).borrow() {
@@ -1104,48 +1115,21 @@ export const useUsageSubscription = () => {
                     }
                     
                     // Get encrypted LiteLLM key data from the Flow vault (stored on-chain)
+                    // NOTE: We no longer auto-decrypt keys for security - user must explicitly decrypt
                     let encryptedKeyData = null;
-                    let litellmKey = null;
                     
-                    // Try to get encrypted key data separately for better error handling
+                    // Try to get encrypted key data (but don't decrypt yet)
                     try {
                         encryptedKeyData = await getEncryptedKeyData(vaultId);
+                        if (encryptedKeyData && encryptedKeyData.encryptedKey && encryptedKeyData.salt) {
+                            console.log(`   🔒 Found encrypted LiteLLM key in Flow vault ${vaultId} (requires signature to decrypt)`);
+                        }
                     } catch (keyErr) {
                         console.warn(`   Could not fetch encrypted key data for vault ${vaultId}:`, keyErr.message);
                     }
                     
-                    // If encrypted key data exists, decrypt it
-                    if (encryptedKeyData && encryptedKeyData.encryptedKey && encryptedKeyData.salt) {
-                        try {
-                            console.log(`   🔓 Decrypting LiteLLM key for vault ${vaultId}...`);
-                            litellmKey = await encryptionService.decryptApiKey(
-                                encryptedKeyData.encryptedKey,
-                                encryptedKeyData.salt,
-                                userAddress
-                            );
-                            console.log(`   ✅ Successfully decrypted LiteLLM key for vault ${vaultId}`);
-                        } catch (decryptErr) {
-                            console.error(`   ❌ Failed to decrypt LiteLLM key for vault ${vaultId}:`, decryptErr.message);
-                            litellmKey = null;
-                        }
-                    }
-                    
-                    if (litellmKey) {
-                        console.log(`   ✅ Found LiteLLM key in Flow vault ${vaultId}`);
-                    } else {
-                        console.log(`   ⚠️ No LiteLLM key found in Flow vault ${vaultId}`);
-                    }
-                    
-                    // Get real-time usage data if we have the LiteLLM key
-                    let usageData = null;
-                    if (litellmKey) {
-                        try {
-                            console.log(`   Fetching LiteLLM usage data for vault ${vaultId}...`);
-                            usageData = await litellmKeyService.getKeyUsage(litellmKey);
-                        } catch (usageErr) {
-                            console.warn(`   Could not fetch usage data: ${usageErr.message}`);
-                        }
-                    }
+                    // We no longer auto-decrypt or auto-fetch usage data for security
+                    // User must explicitly request decryption via UI button with wallet signature
                     
                     // Convert blockchain data to subscription format
                     const subscription = {
@@ -1170,10 +1154,13 @@ export const useUsageSubscription = () => {
                         lastPaidRequests: 0,
                         totalPaidAmount: 0,
                         lastOracleUpdate: 0,
-                        litellmKey: litellmKey,
-                        usageData: usageData,
+                        // Security change: No longer auto-decrypt keys
+                        litellmKey: null, // Will be populated when user explicitly decrypts
+                        encryptedKeyData: encryptedKeyData, // Store encrypted data for later decryption
+                        usageData: null, // Will be fetched after key decryption
                         hasApiKey: vaultDetails.hasApiKey || false,
                         supportsEncryption: vaultDetails.supportsEncryption || false,
+                        requiresSignature: true, // New flag indicating signature-based decryption
                         source: 'blockchain-registry-and-detection',
                         blockchainVerified: true,
                         lastUpdated: new Date().toISOString()
@@ -1279,6 +1266,63 @@ export const useUsageSubscription = () => {
         }
     };
 
+    // Decrypt API key for a specific vault with wallet signature
+    const decryptVaultApiKey = async (vaultId, userAddress) => {
+        try {
+            console.log(`🔓 Decrypting API key for vault ${vaultId} with wallet signature...`);
+            
+            // Get encrypted key data from vault
+            const encryptedKeyData = await getEncryptedKeyData(vaultId);
+            if (!encryptedKeyData || !encryptedKeyData.encryptedKey || !encryptedKeyData.salt) {
+                throw new Error('No encrypted key found in vault');
+            }
+            
+            // Decrypt using wallet signature
+            const litellmKey = await encryptionService.decryptApiKeyWithSignature(
+                encryptedKeyData.encryptedKey,
+                encryptedKeyData.salt,
+                userAddress,
+                vaultId,
+                async (message) => {
+                    try {
+                        console.log(`📝 Requesting wallet signature for message: "${message}"`);
+                        
+                        // Use FCL to sign the message with proper error handling
+                        const signatureResult = await fcl.currentUser.signUserMessage(message);
+                        
+                        console.log(`✅ Signature result:`, signatureResult);
+                        
+                        // FCL returns signature in different formats, extract the signature
+                        let signature;
+                        if (typeof signatureResult === 'string') {
+                            signature = signatureResult;
+                        } else if (signatureResult?.signature) {
+                            signature = signatureResult.signature;
+                        } else if (signatureResult?.[0]?.signature) {
+                            signature = signatureResult[0].signature;
+                        } else {
+                            throw new Error('No signature found in wallet response');
+                        }
+                        
+                        console.log(`🔏 Extracted signature: ${signature}`);
+                        return signature;
+                        
+                    } catch (sigError) {
+                        console.error('❌ Wallet signature failed:', sigError);
+                        throw new Error(`Wallet signature failed: ${sigError.message}`);
+                    }
+                }
+            );
+            
+            console.log(`✅ Successfully decrypted API key for vault ${vaultId}`);
+            return litellmKey;
+            
+        } catch (error) {
+            console.error(`❌ Failed to decrypt API key for vault ${vaultId}:`, error);
+            throw error;
+        }
+    };
+
     return {
         createSubscriptionVault,
         topUpSubscription,
@@ -1294,6 +1338,7 @@ export const useUsageSubscription = () => {
         updateSubscription,
         deleteSubscription,
         setEncryptedLiteLLMKeyInVault,
+        decryptVaultApiKey,
         isLoading,
         error,
         txStatus,
