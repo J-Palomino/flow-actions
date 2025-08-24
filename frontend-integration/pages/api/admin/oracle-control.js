@@ -41,13 +41,12 @@ function startOracle(req, res) {
     console.log('🚀 Starting oracle from web interface...');
     
     const oracleDir = path.join(process.cwd(), '../scripts/fdc-integration');
-    const envFile = path.join(process.cwd(), '../../.env');
     
-    // Check if environment is set up
-    if (!fs.existsSync(envFile)) {
+    // Check if environment variables are set up (production uses env vars, not .env file)
+    if (!process.env.ORACLE_FLOW_ADDRESS || !process.env.ORACLE_PRIVATE_KEY || !process.env.LITELLM_API_KEY) {
         return res.status(400).json({
             success: false,
-            error: 'Environment file not found. Please set up .env file first.'
+            error: 'Required environment variables not set. Please configure ORACLE_FLOW_ADDRESS, ORACLE_PRIVATE_KEY, and LITELLM_API_KEY.'
         });
     }
 

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p ${PORT:-3000}",
+    "start:prod": "NODE_ENV=production next start -p ${PORT:-3000}",
     "lint": "next lint",
     "test:ui": "node test-quick.js",
     "test:ui:advanced": "node test-ui-improved.js",
