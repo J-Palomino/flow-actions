@@ -14,6 +14,7 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
     const [decryptingKey, setDecryptingKey] = useState(false);
     const [dataSource, setDataSource] = useState('None'); // Track current data source
     const [flowPrice, setFlowPrice] = useState(null); // Dynamic FLOW price from oracle
+    const [oracleStatus, setOracleStatus] = useState({ type: 'none', source: 'Unknown' });
     
     const { decryptVaultApiKey, getFlowPrice } = useUsageSubscription();
     
@@ -24,14 +25,21 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                 const priceData = await getFlowPrice();
                 if (priceData.price !== null) {
                     setFlowPrice(priceData.price);
-                    console.log(`💱 Updated FLOW price: $${priceData.price} (${priceData.source})`);
+                    setOracleStatus({ 
+                        type: priceData.oracleType || 'unknown', 
+                        source: priceData.source || 'Unknown Oracle',
+                        network: priceData.network
+                    });
+                    console.log(`💱 Updated FLOW price: $${priceData.price} (${priceData.source}) [${priceData.oracleType}]`);
                 } else {
                     setFlowPrice(null);
+                    setOracleStatus({ type: 'none', source: 'No Oracle Available' });
                     console.warn('⚠️ FLOW price oracle unavailable:', priceData.error);
                 }
             } catch (error) {
                 console.warn('⚠️ Error fetching FLOW price:', error);
                 setFlowPrice(null);
+                setOracleStatus({ type: 'error', source: 'Oracle Error' });
             }
         };
         
@@ -331,10 +339,18 @@ const SubscriptionTile = ({ subscription, onUpdate, onDelete, onTopUp }) => {
                                 {flowPrice !== null ? (
                                     <div className="balance-usd">
                                         ≈ {formatCurrency((parseFloat(subscription?.balance || 0) * flowPrice))}
+                                        <div className="oracle-indicator">
+                                            {oracleStatus.type === 'primary' && '🟢 FTSO'}
+                                            {oracleStatus.type === 'fallback' && '🟡 Chainlink'}
+                                            {oracleStatus.type === 'unknown' && '🔵 Oracle'}
+                                        </div>
                                     </div>
                                 ) : (
                                     <div className="balance-usd oracle-unavailable">
-                                        Oracle unavailable
+                                        {oracleStatus.source}
+                                        <div className="oracle-indicator">
+                                            🔴 No Oracle
+                                        </div>
                                     </div>
                                 )}
                             </div>

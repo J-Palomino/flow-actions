@@ -95,3 +95,9 @@ input:focus {
   color: #ff6b6b !important;
   font-style: italic;
 }
+
+.oracle-indicator {
+  font-size: 0.7em;
+  margin-top: 2px;
+  opacity: 0.8;
+}

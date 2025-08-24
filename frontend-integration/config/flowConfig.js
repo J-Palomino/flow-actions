@@ -80,6 +80,7 @@ const CONTRACT_ADDRESSES = {
         EncryptedUsageSubscriptions: '0x6daee039a7b9c2f0', // New contract with encrypted key storage
         SimpleUsageSubscriptions: '0x6daee039a7b9c2f0',  // Deployed contract (alias)
         FTSOPriceFeedConnector: '0x6daee039a7b9c2f0',    // Updated with price feeds
+        ChainlinkPriceFeedConnector: '0x6daee039a7b9c2f0', // Chainlink oracle fallback
         FlareFDCTriggers: '0x6daee039a7b9c2f0',          // Deployed contract
         ExampleConnectors: '0x6daee039a7b9c2f0'          // Deployed contract
     }

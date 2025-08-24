@@ -29,12 +29,19 @@ export default function Home() {
                                 <span className="bg-blue-600 px-3 py-1 rounded">⚡ Flow Blockchain</span>
                                 <span className="bg-purple-600 px-3 py-1 rounded">🔑 LiteLLM Keys</span>
                             </div>
-                            <div className="flex justify-center">
+                            <div className="flex justify-center space-x-4">
                                 <a 
                                     href="/how-it-works" 
                                     className="inline-flex items-center px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm"
                                 >
                                     🔧 How It Works & Public Contracts →
+                                </a>
+                                
+                                <a 
+                                    href="/admin/payment-dashboard" 
+                                    className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm"
+                                >
+                                    💰 Payment Dashboard (Admin)
                                 </a>
                             </div>
                         </div>

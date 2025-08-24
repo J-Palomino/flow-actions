@@ -5,28 +5,50 @@ import { CONTRACTS, TX_STATUS } from '../config/flowConfig';
 import litellmKeyService from '../services/litellmKeyService';
 import encryptionService from '../services/encryptionService';
 
-// Script to get current FLOW/USD price from Flare FTSO oracle
+// Script to get current FLOW/USD price from dual oracle system (Flare FTSO + Chainlink)
 const GET_FLOW_PRICE_SCRIPT = `
-import FTSOPriceFeedConnector from 0x123cb47fe122f6e3
+import FTSOPriceFeedConnector from 0x6daee039a7b9c2f0
+import ChainlinkPriceFeedConnector from 0x6daee039a7b9c2f0
 
 access(all) fun main(): {String: AnyStruct} {
-    if let priceData = FTSOPriceFeedConnector.getCurrentPrice(symbol: "FLOW/USD") {
-        return {
-            "success": true,
-            "price": priceData.price,
-            "verified": priceData.verified,
-            "timestamp": priceData.timestamp,
-            "source": "Flare FTSO Oracle"
+    // Primary: Try Flare FTSO price feed
+    if let ftsoPrice = FTSOPriceFeedConnector.getCurrentPrice(symbol: "FLOW/USD") {
+        if ftsoPrice.verified && ftsoPrice.price > 0.1 && ftsoPrice.price < 100.0 {
+            return {
+                "success": true,
+                "price": ftsoPrice.price,
+                "verified": ftsoPrice.verified,
+                "timestamp": ftsoPrice.timestamp,
+                "source": "Flare FTSO Oracle",
+                "oracleType": "primary"
+            }
         }
     }
     
+    // Fallback: Try Chainlink price feed
+    if let chainlinkPrice = ChainlinkPriceFeedConnector.getCurrentPrice(symbol: "FLOW/USD") {
+        if chainlinkPrice.verified && chainlinkPrice.price > 0.1 && chainlinkPrice.price < 100.0 {
+            return {
+                "success": true,
+                "price": chainlinkPrice.price,
+                "verified": chainlinkPrice.verified,
+                "timestamp": chainlinkPrice.timestamp,
+                "source": "Chainlink Oracle (".concat(chainlinkPrice.network).concat(")"),
+                "oracleType": "fallback",
+                "network": chainlinkPrice.network
+            }
+        }
+    }
+    
+    // No valid oracle price available
     return {
         "success": false,
         "price": nil,
         "verified": false,
         "timestamp": 0.0,
-        "source": "Oracle Unavailable",
-        "error": "FTSO price feed unavailable"
+        "source": "No Oracle Available",
+        "oracleType": "none",
+        "error": "Both FTSO and Chainlink oracles unavailable"
     }
 }
 `;
